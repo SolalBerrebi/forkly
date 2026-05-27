@@ -6,8 +6,13 @@ interface MessageListProps {
   sessionId: string;
 }
 
+// Stable empty-array reference so the selector doesn't churn React when a
+// session has no messages yet. Returning a fresh `[]` from a Zustand selector
+// breaks getSnapshot caching → 'Maximum update depth exceeded' → renderer dies.
+const EMPTY_IDS: string[] = [];
+
 export function MessageList({ sessionId }: MessageListProps) {
-  const ids = useMessagesStore((s) => s.bySession[sessionId] ?? []);
+  const ids = useMessagesStore((s) => s.bySession[sessionId] ?? EMPTY_IDS);
   const byId = useMessagesStore((s) => s.byId);
   const streaming = useMessagesStore((s) => s.streaming);
   const errors = useMessagesStore((s) => s.errors);
