@@ -47,10 +47,60 @@ html[data-theme="light"] {
   --color-fg-subtle: #a1a1a8;
 }
 
-/* Subtle cross-grid background — placeholder until xyflow custom bg in M1. */
-.cross-grid {
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--color-fg) 4%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--color-fg) 4%, transparent) 1px, transparent 1px);
-  background-size: 40px 40px;
+:root {
+  --fork-grid-color: color-mix(in srgb, var(--color-fg) 10%, transparent);
+}
+
+html[data-theme="light"] {
+  --fork-grid-color: color-mix(in srgb, var(--color-fg) 14%, transparent);
+}
+
+/* ----- xyflow overrides ----------------------------------------- */
+.react-flow {
+  background-color: var(--color-bg);
+  --xy-background-color: var(--color-bg);
+  --xy-edge-stroke-default: var(--color-fg-subtle);
+  --xy-edge-stroke-selected-default: var(--color-accent-from);
+  --xy-edge-stroke-width-default: 1.5;
+  --xy-connectionline-stroke-default: var(--color-accent-from);
+  --xy-selection-background-color-default: color-mix(in srgb, var(--color-accent-from) 8%, transparent);
+  --xy-selection-border-default: 1px dashed var(--color-accent-from);
+  font-family: var(--font-sans);
+}
+
+.react-flow__controls {
+  box-shadow: none !important;
+}
+
+.react-flow__controls-button {
+  background: transparent !important;
+  color: var(--color-fg-muted) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+.react-flow__controls-button:hover {
+  background: var(--color-bg) !important;
+  color: var(--color-fg) !important;
+}
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+}
+
+.react-flow__minimap {
+  box-shadow: none !important;
+}
+.react-flow__minimap-mask {
+  fill: color-mix(in srgb, var(--color-bg) 70%, transparent) !important;
+}
+
+.react-flow__attribution {
+  display: none !important;
+}
+
+.react-flow__handle {
+  border-radius: 9999px !important;
 }
