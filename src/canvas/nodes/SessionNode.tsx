@@ -1,5 +1,13 @@
-import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import {
+  Handle,
+  Position,
+  useStore,
+  type Node,
+  type NodeProps,
+  type ReactFlowState,
+} from "@xyflow/react";
 import { GitFork } from "lucide-react";
+import { useMessagesStore } from "../../state/messagesStore";
 import { ChatView } from "../../chat/ChatView";
 
 export interface SessionNodeData extends Record<string, unknown> {
@@ -10,7 +18,27 @@ export interface SessionNodeData extends Record<string, unknown> {
 
 export type SessionNodeType = Node<SessionNodeData, "session">;
 
+// Subscribe only to the zoom scalar — the rest of viewport state can change
+// many times per second during pan, and we don't want to re-render every node
+// on pan ticks.
+const zoomSelector = (s: ReactFlowState) => s.transform[2];
+
+// Mode thresholds. Picked so the full chat is readable when the node is
+// roughly real-size on screen, the compact card stays legible while you're
+// "surveying" a small tree, and the minimal label is what you see when you
+// zoom out to look at a large branching workspace.
+const FULL_MIN_ZOOM = 0.7;
+const COMPACT_MIN_ZOOM = 0.35;
+
+// Stable empty-array reference for selectors — otherwise `bySession[sid] ?? []`
+// would return a new array every render and break Zustand snapshot caching.
+const EMPTY_IDS: string[] = [];
+
 export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) {
+  const zoom = useStore(zoomSelector);
+  const mode: "full" | "compact" | "label" =
+    zoom >= FULL_MIN_ZOOM ? "full" : zoom >= COMPACT_MIN_ZOOM ? "compact" : "label";
+
   return (
     <div
       className={[
@@ -32,6 +60,7 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
         className="h-2! w-2! border-0! bg-fg-subtle! opacity-0 transition-opacity group-hover:opacity-100"
       />
 
+      {/* Header — same across all modes; just a thin identification strip. */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-bg text-accent-from">
           <GitFork className="h-3.5 w-3.5" />
@@ -42,7 +71,84 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
         </div>
       </div>
 
-      <ChatView sessionId={id} />
+      {mode === "full" && <ChatView sessionId={id} />}
+      {mode === "compact" && <CompactBody sessionId={id} data={data} />}
+      {mode === "label" && <LabelBody data={data} />}
+    </div>
+  );
+}
+
+function CompactBody({ sessionId, data }: { sessionId: string; data: SessionNodeData }) {
+  const ids = useMessagesStore((s) => s.bySession[sessionId] ?? EMPTY_IDS);
+  const byId = useMessagesStore((s) => s.byId);
+  const isStreaming = useMessagesStore((s) => !!s.streamingSessions[sessionId]);
+
+  // Show the most recent user prompt + the most recent assistant response.
+  // This is enough to know what a node is at a glance without unfurling.
+  let lastUser: string | null = null;
+  let lastAssistant: string | null = null;
+  for (let i = ids.length - 1; i >= 0; i -= 1) {
+    const m = byId[ids[i]];
+    if (!m) continue;
+    if (!lastAssistant && m.role === "assistant") lastAssistant = m.content;
+    else if (!lastUser && m.role === "user") lastUser = m.content;
+    if (lastUser && lastAssistant) break;
+  }
+
+  const truncate = (s: string, n: number) =>
+    s.length > n ? `${s.slice(0, n).trim()}…` : s;
+
+  return (
+    <div className="flex flex-1 flex-col gap-3 overflow-hidden px-4 py-4">
+      {lastUser ? (
+        <div className="space-y-1">
+          <div className="font-mono text-[9px] uppercase tracking-wider text-fg-subtle">
+            you
+          </div>
+          <div className="line-clamp-2 font-mono text-[12px] text-fg">
+            {truncate(lastUser, 160)}
+          </div>
+        </div>
+      ) : (
+        <div className="font-mono text-[11px] text-fg-subtle">empty session</div>
+      )}
+
+      {lastAssistant && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <div className="font-mono text-[9px] uppercase tracking-wider text-fg-subtle">
+              {data.modelId}
+            </div>
+            {isStreaming && (
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent-from" />
+            )}
+          </div>
+          <div className="line-clamp-[10] font-sans text-[12.5px] leading-relaxed text-fg">
+            {truncate(lastAssistant, 600)}
+          </div>
+        </div>
+      )}
+
+      {!lastUser && !lastAssistant && isStreaming && (
+        <div className="flex items-center gap-1.5 font-mono text-[10px] text-fg-subtle">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent-from" />
+          streaming…
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LabelBody({ data }: { data: SessionNodeData }) {
+  // At very far zoom the actual on-screen height is ~50-100px; even a single
+  // big line of text becomes unreadable. We render the title huge so the
+  // workspace stays scannable even when fully zoomed out.
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+      <div className="font-mono text-[44px] leading-none tracking-tight text-fg">
+        {data.title}
+      </div>
+      <div className="font-mono text-[18px] text-fg-muted">{data.modelId}</div>
     </div>
   );
 }
