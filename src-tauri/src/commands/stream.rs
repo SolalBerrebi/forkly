@@ -83,6 +83,7 @@ pub async fn start_stream(
                 merge_source_session_ids, workspace_id,
                 input_tokens_total, output_tokens_total, last_activity_at, working_dir,
                 width, height, position_locked,
+                pre_expand_width, pre_expand_height,
                 created_at, updated_at
          FROM sessions WHERE id = ?",
     )

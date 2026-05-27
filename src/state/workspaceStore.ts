@@ -42,6 +42,10 @@ export interface Session {
   width: number | null;
   height: number | null;
   positionLocked: boolean;
+  /** True when the session is currently expanded — width/height reflect the
+   *  expanded preset, preExpand* hold the size to restore on collapse. */
+  preExpandWidth: number | null;
+  preExpandHeight: number | null;
 }
 
 export interface AddSessionInput {
@@ -84,6 +88,8 @@ function fromIpc(s: IpcSession): Session {
     width: s.width,
     height: s.height,
     positionLocked: s.positionLocked > 0,
+    preExpandWidth: s.preExpandWidth,
+    preExpandHeight: s.preExpandHeight,
   };
 }
 
@@ -131,6 +137,12 @@ interface WorkspaceState {
   updateSessionSize: (id: SessionId, width: number, height: number) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
   updateSessionModel: (id: SessionId, modelId: string) => Promise<void>;
+  /**
+   * Toggle a session between its normal size and a generous expanded preset.
+   * Backend stores the pre-expand size atomically, so collapse always returns
+   * to whatever the session was before the user hit Expand.
+   */
+  toggleSessionExpanded: (id: SessionId) => Promise<void>;
   applyTitleFromBackend: (id: SessionId, title: string) => void;
   /**
    * Run dagre auto-layout on the current workspace's sessions. Honours
@@ -543,6 +555,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (s) s.modelId = modelId;
       });
       await ipc.updateSession(id, { modelId });
+    },
+
+    toggleSessionExpanded: async (id) => {
+      const s = get().sessions[id];
+      if (!s) return;
+      const isExpanded =
+        s.preExpandWidth !== null && s.preExpandHeight !== null;
+      const updated = isExpanded
+        ? await ipc.collapseSession(id)
+        : await ipc.expandSession(id);
+      set((state) => {
+        state.sessions[updated.id] = fromIpc(updated);
+      });
     },
 
     applyTitleFromBackend: (id, title) => {

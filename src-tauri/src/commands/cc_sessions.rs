@@ -333,11 +333,13 @@ pub async fn import_cc_session(
            merge_source_session_ids, workspace_id,
            input_tokens_total, output_tokens_total, last_activity_at, working_dir,
            width, height, position_locked,
+           pre_expand_width, pre_expand_height,
            created_at, updated_at)
          VALUES (?, ?, 'anthropic', ?, 'claude-code', NULL,
                  ?, ?, NULL, NULL, NULL, ?,
                  0, 0, ?, ?,
                  NULL, NULL, 0,
+                 NULL, NULL,
                  ?, ?)",
     )
     .bind(&input.session_id)
@@ -408,5 +410,6 @@ const SESSION_SELECT: &str = "
     merge_source_session_ids, workspace_id,
     input_tokens_total, output_tokens_total, last_activity_at, working_dir,
     width, height, position_locked,
+    pre_expand_width, pre_expand_height,
     created_at, updated_at
 ";

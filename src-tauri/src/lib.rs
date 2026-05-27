@@ -123,6 +123,8 @@ pub fn run() {
             commands::sessions::create_session,
             commands::sessions::update_session,
             commands::sessions::merge_sessions,
+            commands::sessions::expand_session,
+            commands::sessions::collapse_session,
             commands::sessions::delete_session,
             commands::messages::list_messages,
             commands::secrets::has_api_key,

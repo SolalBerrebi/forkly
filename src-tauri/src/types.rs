@@ -44,6 +44,10 @@ pub struct Session {
     /// 1 once the user has manually dragged this node — auto-layout leaves
     /// locked nodes where they are and only repositions unlocked ones.
     pub position_locked: i64,
+    /// When set (both fields), the session is in "expanded" state and these
+    /// hold the dimensions to restore on collapse. Cleared on collapse.
+    pub pre_expand_width: Option<f64>,
+    pub pre_expand_height: Option<f64>,
     pub created_at: i64,
     pub updated_at: i64,
 }

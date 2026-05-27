@@ -31,6 +31,8 @@ export interface Session {
   width: number | null;
   height: number | null;
   positionLocked: number;
+  preExpandWidth: number | null;
+  preExpandHeight: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -105,6 +107,8 @@ export const ipc = {
       positionX,
       positionY,
     }),
+  expandSession: (id: string) => invoke<Session>("expand_session", { id }),
+  collapseSession: (id: string) => invoke<Session>("collapse_session", { id }),
   deleteSession: (id: string) => invoke<void>("delete_session", { id }),
 
   listMessages: (sessionId: string) =>

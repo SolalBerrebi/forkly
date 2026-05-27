@@ -9,7 +9,16 @@ import {
   type ReactFlowState,
 } from "@xyflow/react";
 import { motion } from "framer-motion";
-import { Check, ChevronDown, GitBranch, GitFork, MoreHorizontal, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  GitBranch,
+  GitFork,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { ChatView } from "../../chat/ChatView";
 import { ConfirmDialog } from "../../chrome/ConfirmDialog";
@@ -55,8 +64,13 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
   const zoom = useStore(zoomSelector);
   const removeSession = useWorkspaceStore((s) => s.removeSession);
   const updateSessionSize = useWorkspaceStore((s) => s.updateSessionSize);
+  const toggleSessionExpanded = useWorkspaceStore((s) => s.toggleSessionExpanded);
   const width = useWorkspaceStore((s) => s.sessions[id]?.width ?? null);
   const height = useWorkspaceStore((s) => s.sessions[id]?.height ?? null);
+  const isExpanded = useWorkspaceStore((s) => {
+    const sess = s.sessions[id];
+    return !!(sess?.preExpandWidth !== null && sess?.preExpandWidth !== undefined);
+  });
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const mode: "full" | "compact" | "label" =
@@ -71,6 +85,12 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
     } catch (err) {
       console.error("delete session failed", err);
     }
+  };
+
+  const handleToggleExpand = () => {
+    toggleSessionExpanded(id).catch((err) =>
+      console.error("toggle expand failed", err),
+    );
   };
 
   return (
@@ -88,8 +108,10 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
             : "border-border hover:border-border-strong",
         ].join(" ")}
       >
+        {/* NodeResizer hidden while expanded — the expand preset owns the
+            dimensions until the user collapses back. */}
         <NodeResizer
-          isVisible={selected}
+          isVisible={selected && !isExpanded}
           minWidth={MIN_WIDTH}
           minHeight={MIN_HEIGHT}
           maxWidth={MAX_WIDTH}
@@ -129,6 +151,25 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
             providerId={data.providerId}
             modelId={data.modelId}
           />
+          <button
+            onClick={handleToggleExpand}
+            aria-label={isExpanded ? "Collapse session" : "Expand session"}
+            title={isExpanded ? "Collapse · restore previous size" : "Expand"}
+            className={[
+              "flex h-5 w-5 items-center justify-center rounded transition-all hover:bg-bg hover:text-fg",
+              // Always-visible when expanded so the user has an obvious way
+              // back; hover-revealed otherwise to keep the header clean.
+              isExpanded
+                ? "text-accent-from"
+                : "text-fg-subtle opacity-0 group-hover:opacity-100",
+            ].join(" ")}
+          >
+            {isExpanded ? (
+              <Minimize2 className="h-3 w-3" />
+            ) : (
+              <Maximize2 className="h-3 w-3" />
+            )}
+          </button>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button

@@ -12,6 +12,7 @@ const SELECT_SESSION_COLUMNS: &str = "
     merge_source_session_ids, workspace_id,
     input_tokens_total, output_tokens_total, last_activity_at, working_dir,
     width, height, position_locked,
+    pre_expand_width, pre_expand_height,
     created_at, updated_at
 ";
 
@@ -222,6 +223,76 @@ pub async fn merge_sessions(
     .bind(&workspace)
     .bind(now)
     .bind(now)
+    .execute(pool)
+    .await?;
+
+    fetch_session(pool, &id).await
+}
+
+/// Generous preset size used when a session is expanded. Chosen to look right
+/// on the default 1280x820 Tauri window without overflowing it.
+const EXPAND_WIDTH: f64 = 1100.0;
+const EXPAND_HEIGHT: f64 = 760.0;
+
+#[tauri::command]
+pub async fn expand_session(state: State<'_, AppState>, id: String) -> AppResult<Session> {
+    let pool = state.db().await?;
+    let current = fetch_session(pool, &id).await?;
+
+    // If already expanded, no-op (frontend can avoid double-trigger but be defensive).
+    if current.pre_expand_width.is_some() && current.pre_expand_height.is_some() {
+        return Ok(current);
+    }
+
+    let pre_w = current.width.unwrap_or(360.0);
+    let pre_h = current.height.unwrap_or(460.0);
+    let now = now_ms();
+
+    sqlx::query(
+        "UPDATE sessions
+         SET pre_expand_width = ?,
+             pre_expand_height = ?,
+             width = ?,
+             height = ?,
+             updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(pre_w)
+    .bind(pre_h)
+    .bind(EXPAND_WIDTH)
+    .bind(EXPAND_HEIGHT)
+    .bind(now)
+    .bind(&id)
+    .execute(pool)
+    .await?;
+
+    fetch_session(pool, &id).await
+}
+
+#[tauri::command]
+pub async fn collapse_session(state: State<'_, AppState>, id: String) -> AppResult<Session> {
+    let pool = state.db().await?;
+    let current = fetch_session(pool, &id).await?;
+
+    let (restore_w, restore_h) = match (current.pre_expand_width, current.pre_expand_height) {
+        (Some(w), Some(h)) => (w, h),
+        _ => return Ok(current), // wasn't expanded — no-op
+    };
+
+    let now = now_ms();
+    sqlx::query(
+        "UPDATE sessions
+         SET width = ?,
+             height = ?,
+             pre_expand_width = NULL,
+             pre_expand_height = NULL,
+             updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(restore_w)
+    .bind(restore_h)
+    .bind(now)
+    .bind(&id)
     .execute(pool)
     .await?;
 
