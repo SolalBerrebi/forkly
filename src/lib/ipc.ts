@@ -2,6 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type TransportId = "claude-code" | "api";
 
+export interface Workspace {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Session {
   id: string;
   title: string;
@@ -15,6 +23,7 @@ export interface Session {
   forkPointMessageId: string | null;
   /** JSON-encoded array of source session ids for merge nodes, NULL otherwise. */
   mergeSourceSessionIds: string | null;
+  workspaceId: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -43,6 +52,7 @@ export interface CreateSessionInput {
   providerId: string;
   modelId: string;
   transportId?: TransportId;
+  workspaceId?: string;
   systemPrompt?: string;
   positionX?: number;
   positionY?: number;
@@ -61,7 +71,16 @@ export interface UpdateSessionInput {
 }
 
 export const ipc = {
-  listSessions: () => invoke<Session[]>("list_sessions"),
+  listWorkspaces: () => invoke<Workspace[]>("list_workspaces"),
+  createWorkspace: (name: string) =>
+    invoke<Workspace>("create_workspace", { name }),
+  renameWorkspace: (id: string, name: string) =>
+    invoke<Workspace>("rename_workspace", { id, name }),
+  deleteWorkspace: (id: string) =>
+    invoke<string[]>("delete_workspace", { id }),
+
+  listSessions: (workspaceId?: string) =>
+    invoke<Session[]>("list_sessions", { workspaceId }),
   createSession: (input: CreateSessionInput) =>
     invoke<Session>("create_session", { input }),
   updateSession: (id: string, patch: UpdateSessionInput) =>

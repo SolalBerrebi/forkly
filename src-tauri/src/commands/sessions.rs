@@ -9,16 +9,33 @@ use uuid::Uuid;
 const SELECT_SESSION_COLUMNS: &str = "
     id, title, provider_id, model_id, transport_id, system_prompt,
     position_x, position_y, parent_session_id, fork_point_message_id,
-    merge_source_session_ids, created_at, updated_at
+    merge_source_session_ids, workspace_id, created_at, updated_at
 ";
 
 #[tauri::command]
-pub async fn list_sessions(state: State<'_, AppState>) -> AppResult<Vec<Session>> {
+pub async fn list_sessions(
+    state: State<'_, AppState>,
+    workspace_id: Option<String>,
+) -> AppResult<Vec<Session>> {
     let pool = state.db().await?;
-    let sql = format!(
-        "SELECT {SELECT_SESSION_COLUMNS} FROM sessions ORDER BY created_at ASC"
-    );
-    let rows = sqlx::query_as::<_, Session>(&sql).fetch_all(pool).await?;
+    let rows = match workspace_id {
+        Some(wid) => {
+            let sql = format!(
+                "SELECT {SELECT_SESSION_COLUMNS} FROM sessions
+                 WHERE workspace_id = ? ORDER BY created_at ASC"
+            );
+            sqlx::query_as::<_, Session>(&sql)
+                .bind(&wid)
+                .fetch_all(pool)
+                .await?
+        }
+        None => {
+            let sql = format!(
+                "SELECT {SELECT_SESSION_COLUMNS} FROM sessions ORDER BY created_at ASC"
+            );
+            sqlx::query_as::<_, Session>(&sql).fetch_all(pool).await?
+        }
+    };
     Ok(rows)
 }
 
@@ -34,6 +51,9 @@ pub async fn create_session(
     let transport = input
         .transport_id
         .unwrap_or_else(|| "claude-code".to_string());
+    let workspace = input
+        .workspace_id
+        .unwrap_or_else(|| "default".to_string());
     let px = input.position_x.unwrap_or(0.0);
     let py = input.position_y.unwrap_or(0.0);
 
@@ -41,8 +61,8 @@ pub async fn create_session(
         "INSERT INTO sessions
           (id, title, provider_id, model_id, transport_id, system_prompt,
            position_x, position_y, parent_session_id, fork_point_message_id,
-           created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           workspace_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&title)
@@ -54,6 +74,7 @@ pub async fn create_session(
     .bind(py)
     .bind(&input.parent_session_id)
     .bind(&input.fork_point_message_id)
+    .bind(&workspace)
     .bind(now)
     .bind(now)
     .execute(pool)
@@ -152,12 +173,18 @@ pub async fn merge_sessions(
         .map_err(|e| AppError::Other(format!("encode merge sources: {e}")))?;
     let title = "synthesis";
 
+    // Inherit workspace from the first source so merges stay in the same canvas.
+    let workspace = first
+        .workspace_id
+        .clone()
+        .unwrap_or_else(|| "default".to_string());
+
     sqlx::query(
         "INSERT INTO sessions
           (id, title, provider_id, model_id, transport_id, system_prompt,
            position_x, position_y, parent_session_id, fork_point_message_id,
-           merge_source_session_ids, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)",
+           merge_source_session_ids, workspace_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(title)
@@ -168,6 +195,7 @@ pub async fn merge_sessions(
     .bind(position_x)
     .bind(position_y)
     .bind(&sources_json)
+    .bind(&workspace)
     .bind(now)
     .bind(now)
     .execute(pool)

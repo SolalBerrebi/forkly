@@ -33,7 +33,7 @@ pub async fn build_history(pool: &SqlitePool, session_id: &str) -> AppResult<Vec
     let session = sqlx::query_as::<_, crate::types::Session>(
         "SELECT id, title, provider_id, model_id, transport_id, system_prompt,
                 position_x, position_y, parent_session_id, fork_point_message_id,
-                merge_source_session_ids, created_at, updated_at
+                merge_source_session_ids, workspace_id, created_at, updated_at
          FROM sessions WHERE id = ?",
     )
     .bind(session_id)

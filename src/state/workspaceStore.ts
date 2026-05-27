@@ -1,9 +1,26 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { ipc, type Session as IpcSession, type TransportId } from "../lib/ipc";
+import {
+  ipc,
+  type Session as IpcSession,
+  type TransportId,
+  type Workspace as IpcWorkspace,
+} from "../lib/ipc";
 import { useMessagesStore } from "./messagesStore";
 
 export type SessionId = string;
+export type WorkspaceId = string;
+
+const DEFAULT_WORKSPACE_ID = "default";
+const LAST_WORKSPACE_KEY = "forkly:last-workspace";
+
+export interface Workspace {
+  id: WorkspaceId;
+  name: string;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+}
 
 export interface Session {
   id: SessionId;
@@ -16,6 +33,7 @@ export interface Session {
   forkPointMessageId: string | null;
   /** Decoded list of source session ids — empty for non-merge sessions. */
   mergeSourceSessionIds: SessionId[];
+  workspaceId: WorkspaceId;
 }
 
 export interface AddSessionInput {
@@ -23,6 +41,7 @@ export interface AddSessionInput {
   providerId?: string;
   modelId?: string;
   transportId?: TransportId;
+  workspaceId?: WorkspaceId;
   systemPrompt?: string;
   position?: { x: number; y: number };
   parentSessionId?: SessionId | null;
@@ -49,63 +68,102 @@ function fromIpc(s: IpcSession): Session {
     parentSessionId: s.parentSessionId,
     forkPointMessageId: s.forkPointMessageId,
     mergeSourceSessionIds,
+    workspaceId: s.workspaceId ?? DEFAULT_WORKSPACE_ID,
+  };
+}
+
+function fromIpcWorkspace(w: IpcWorkspace): Workspace {
+  return {
+    id: w.id,
+    name: w.name,
+    sortOrder: w.sortOrder,
+    createdAt: w.createdAt,
+    updatedAt: w.updatedAt,
   };
 }
 
 interface WorkspaceState {
+  // ----- workspaces ("pages / sheets") -----
+  workspacesById: Record<WorkspaceId, Workspace>;
+  currentWorkspaceId: WorkspaceId;
+
+  // ----- sessions (canvas nodes) -----
   sessions: Record<SessionId, Session>;
   isHydrated: boolean;
   hydrationError: string | null;
 
   hydrate: () => Promise<void>;
+
+  switchWorkspace: (id: WorkspaceId) => void;
+  createWorkspace: (name: string) => Promise<WorkspaceId>;
+  renameWorkspace: (id: WorkspaceId, name: string) => Promise<void>;
+  deleteWorkspace: (id: WorkspaceId) => Promise<void>;
+
   addSession: (init?: AddSessionInput) => Promise<SessionId>;
   forkSession: (
     parentId: SessionId,
     forkPointMessageId: string,
     position?: { x: number; y: number },
   ) => Promise<SessionId>;
-  /**
-   * Spawn N sibling forks from the user-message anchor at or before
-   * `anchorMessageId`, place them in a vertical fan to the right of the
-   * parent, and immediately broadcast the user message to each so all N
-   * stream in parallel. Returns the ids of the new fork sessions.
-   */
   fanOut: (
     parentSessionId: SessionId,
     anchorMessageId: string,
     count: number,
   ) => Promise<SessionId[]>;
-  /**
-   * Create a merge node that synthesizes the final responses of 2+ sibling
-   * sessions. Returns the new session id and auto-fires the synthesis stream.
-   */
   mergeSessions: (sourceSessionIds: SessionId[]) => Promise<SessionId>;
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
-  /** Local-only title set — used when the backend has already persisted the
-   *  new title (e.g., after the auto-titling command). Avoids a redundant
-   *  round-trip back to the DB. */
   applyTitleFromBackend: (id: SessionId, title: string) => void;
   removeSession: (id: SessionId) => Promise<void>;
 }
 
 const positionPersistTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
 
+function readLastWorkspace(): WorkspaceId {
+  if (typeof window === "undefined") return DEFAULT_WORKSPACE_ID;
+  return window.localStorage.getItem(LAST_WORKSPACE_KEY) ?? DEFAULT_WORKSPACE_ID;
+}
+
+function persistCurrentWorkspace(id: WorkspaceId) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(LAST_WORKSPACE_KEY, id);
+}
+
 export const useWorkspaceStore = create<WorkspaceState>()(
   immer((set, get) => ({
+    workspacesById: {},
+    currentWorkspaceId: DEFAULT_WORKSPACE_ID,
+
     sessions: {},
     isHydrated: false,
     hydrationError: null,
 
     hydrate: async () => {
       try {
-        const rows = await ipc.listSessions();
+        // Workspaces first — `currentWorkspaceId` decides which sessions we
+        // load. Restored from localStorage when possible, otherwise the
+        // first workspace by sort order.
+        const workspaces = await ipc.listWorkspaces();
+        const last = readLastWorkspace();
+        const chosen =
+          workspaces.find((w) => w.id === last)?.id ??
+          workspaces[0]?.id ??
+          DEFAULT_WORKSPACE_ID;
+
+        const sessions = await ipc.listSessions(chosen);
+
         set((state) => {
+          state.workspacesById = {};
+          for (const w of workspaces) {
+            state.workspacesById[w.id] = fromIpcWorkspace(w);
+          }
+          state.currentWorkspaceId = chosen;
           state.sessions = {};
-          for (const row of rows) state.sessions[row.id] = fromIpc(row);
+          for (const row of sessions) state.sessions[row.id] = fromIpc(row);
           state.isHydrated = true;
           state.hydrationError = null;
         });
+        persistCurrentWorkspace(chosen);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         set((state) => {
@@ -115,11 +173,75 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       }
     },
 
+    switchWorkspace: (id) => {
+      const target = get().workspacesById[id];
+      if (!target) return;
+      persistCurrentWorkspace(id);
+      // Optimistic: clear sessions, then refetch for the new workspace. The
+      // canvas blanks for a frame, then re-populates.
+      set((state) => {
+        state.currentWorkspaceId = id;
+        state.sessions = {};
+      });
+      ipc.listSessions(id)
+        .then((rows) => {
+          set((state) => {
+            for (const row of rows) state.sessions[row.id] = fromIpc(row);
+          });
+        })
+        .catch((err) => console.error("switch workspace failed", err));
+    },
+
+    createWorkspace: async (name) => {
+      const created = await ipc.createWorkspace(name);
+      set((state) => {
+        state.workspacesById[created.id] = fromIpcWorkspace(created);
+        state.currentWorkspaceId = created.id;
+        state.sessions = {}; // new workspace starts empty
+      });
+      persistCurrentWorkspace(created.id);
+      return created.id;
+    },
+
+    renameWorkspace: async (id, name) => {
+      const updated = await ipc.renameWorkspace(id, name);
+      set((state) => {
+        state.workspacesById[updated.id] = fromIpcWorkspace(updated);
+      });
+    },
+
+    deleteWorkspace: async (id) => {
+      const remaining = await ipc.deleteWorkspace(id);
+      set((state) => {
+        delete state.workspacesById[id];
+        // If we just deleted the current workspace, switch to whatever the
+        // backend reported as remaining (sorted), or DEFAULT as a last resort.
+        if (state.currentWorkspaceId === id) {
+          const next = remaining[0] ?? DEFAULT_WORKSPACE_ID;
+          state.currentWorkspaceId = next;
+          state.sessions = {};
+          persistCurrentWorkspace(next);
+        }
+      });
+      // Re-hydrate sessions for the (possibly new) current workspace.
+      const cur = get().currentWorkspaceId;
+      try {
+        const rows = await ipc.listSessions(cur);
+        set((state) => {
+          state.sessions = {};
+          for (const row of rows) state.sessions[row.id] = fromIpc(row);
+        });
+      } catch (err) {
+        console.error("post-delete session reload failed", err);
+      }
+    },
+
     addSession: async (init = {}) => {
       const created = await ipc.createSession({
         providerId: init.providerId ?? "anthropic",
         modelId: init.modelId ?? "claude-sonnet-4-6",
         transportId: init.transportId ?? "claude-code",
+        workspaceId: init.workspaceId ?? get().currentWorkspaceId,
         title: init.title,
         systemPrompt: init.systemPrompt,
         positionX: init.position?.x,
@@ -134,31 +256,25 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     forkSession: async (parentId, forkPointMessageId, position) => {
-      // Read the parent from local state — its provider / model / transport
-      // / system prompt all get inherited by the fork. The frontend is
-      // authoritative for placement; the backend just stores what we send.
       const parent = get().sessions[parentId];
       if (!parent) {
         throw new Error(`fork: parent session ${parentId} not in store`);
       }
-
-      // Default placement: just to the right of the parent + small Y jitter.
       const pos = position ?? {
         x: parent.position.x + 420,
         y: parent.position.y + 60 + (Math.random() - 0.5) * 80,
       };
-
       const created = await ipc.createSession({
         providerId: parent.providerId,
         modelId: parent.modelId,
         transportId: parent.transportId,
+        workspaceId: parent.workspaceId,
         title: "fork",
         positionX: pos.x,
         positionY: pos.y,
         parentSessionId: parentId,
         forkPointMessageId,
       });
-
       set((state) => {
         state.sessions[created.id] = fromIpc(created);
       });
@@ -173,9 +289,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         throw new Error(`fan-out: parent ${parentSessionId} not in store`);
       }
 
-      // Reach into messagesStore to determine the user prompt to broadcast
-      // and the fork point (= the message *before* that user message, so
-      // each fork inherits parent context up to but not including the prompt).
       const msgs = useMessagesStore.getState();
       const ids = msgs.bySession[parentSessionId] ?? [];
       const anchorIdx = ids.indexOf(anchorMessageId);
@@ -183,7 +296,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         throw new Error("fan-out: anchor message not in session");
       }
 
-      // Walk back to find the user message at or before the anchor.
       let userIdx = anchorIdx;
       while (userIdx >= 0 && msgs.byId[ids[userIdx]]?.role !== "user") {
         userIdx -= 1;
@@ -198,8 +310,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const forkPointId = userIdx > 0 ? ids[userIdx - 1] : undefined;
       const promptText = userMessage.content;
 
-      // Vertical fan layout: forks centered around parent.y, spaced so the
-      // 480px node height leaves a comfortable gap between siblings.
       const baseX = parent.position.x + 460;
       const spacing = 520;
       const positions = Array.from({ length: count }, (_, i) => ({
@@ -207,13 +317,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         y: parent.position.y + (i - (count - 1) / 2) * spacing,
       }));
 
-      // Create all N forks in parallel.
       const created = await Promise.all(
         positions.map((pos) =>
           ipc.createSession({
             providerId: parent.providerId,
             modelId: parent.modelId,
             transportId: parent.transportId,
+            workspaceId: parent.workspaceId,
             title: "fork",
             positionX: pos.x,
             positionY: pos.y,
@@ -227,9 +337,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         for (const c of created) state.sessions[c.id] = fromIpc(c);
       });
 
-      // Broadcast the user prompt to every new fork — they all stream their
-      // own variant in parallel. Failures here surface via the stream:error
-      // event, so we don't await individually.
       for (const fork of created) {
         ipc.startStream(fork.id, promptText).catch((err) => {
           console.error(`fan-out broadcast to ${fork.id} failed`, err);
@@ -250,9 +357,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         throw new Error("merge: not all source sessions are in store");
       }
 
-      // Place the merge node to the right of the rightmost source, vertically
-      // centered on the mean of source Ys. Visually this makes the
-      // multi-incoming-edge pattern read like a funnel.
       const maxX = Math.max(...sources.map((s) => s.position.x));
       const meanY = sources.reduce((a, s) => a + s.position.y, 0) / sources.length;
       const position = { x: maxX + 460, y: meanY };
@@ -267,8 +371,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         state.sessions[created.id] = fromIpc(created);
       });
 
-      // Auto-fire synthesis — backend builds the prompt from source outputs
-      // when it sees a merge session's first turn with empty user_message.
       ipc.startStream(created.id, "").catch((err) => {
         console.error("merge synthesis stream failed", err);
       });
@@ -277,13 +379,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     updateSessionPosition: (id, position) => {
-      // Optimistic update for buttery dragging.
       set((state) => {
         const s = state.sessions[id];
         if (s) s.position = position;
       });
 
-      // Debounced persist (drag fires many changes per second).
       const existing = positionPersistTimers.get(id);
       if (existing) clearTimeout(existing);
       const handle = setTimeout(() => {

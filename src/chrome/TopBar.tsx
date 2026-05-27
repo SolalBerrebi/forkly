@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { useWorkspaceStore } from "../state/workspaceStore";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function TopBar() {
   const addSession = useWorkspaceStore((s) => s.addSession);
@@ -35,10 +36,13 @@ export function TopBar() {
 
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 py-3">
-      <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border bg-bg-elevated/70 px-3 py-1.5 backdrop-blur">
-        <GitFork className="h-3.5 w-3.5 text-accent-from" />
-        <span className="font-mono text-sm tracking-tight">forkly</span>
-        <span className="font-mono text-[10px] text-fg-subtle">v0.1.0-dev</span>
+      <div className="pointer-events-auto flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-bg-elevated/70 px-3 py-1.5 backdrop-blur">
+          <GitFork className="h-3.5 w-3.5 text-accent-from" />
+          <span className="font-mono text-sm tracking-tight">forkly</span>
+          <span className="font-mono text-[10px] text-fg-subtle">v0.1.0-dev</span>
+        </div>
+        <WorkspaceSwitcher />
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2">

@@ -2,6 +2,16 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct Workspace {
+    pub id: String,
+    pub name: String,
+    pub sort_order: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Session {
     pub id: String,
     pub title: String,
@@ -16,6 +26,9 @@ pub struct Session {
     /// JSON-encoded array of session ids whose outputs this session
     /// synthesizes. NULL for regular (non-merge) sessions.
     pub merge_source_session_ids: Option<String>,
+    /// Workspace ("page / sheet") this session lives in. Always set after the
+    /// 20260528000001_workspaces migration backfilled existing rows to 'default'.
+    pub workspace_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -42,6 +55,7 @@ pub struct CreateSessionInput {
     pub provider_id: String,
     pub model_id: String,
     pub transport_id: Option<String>,
+    pub workspace_id: Option<String>,
     pub system_prompt: Option<String>,
     pub position_x: Option<f64>,
     pub position_y: Option<f64>,

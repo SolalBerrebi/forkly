@@ -129,6 +129,10 @@ pub fn run() {
             commands::stream::start_stream,
             commands::stream::detect_claude_code,
             commands::titling::auto_title,
+            commands::workspaces::list_workspaces,
+            commands::workspaces::create_workspace,
+            commands::workspaces::rename_workspace,
+            commands::workspaces::delete_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
