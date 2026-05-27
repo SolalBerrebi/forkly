@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { ipc, type Session as IpcSession, type TransportId } from "../lib/ipc";
+import { useMessagesStore } from "./messagesStore";
 
 export type SessionId = string;
 
@@ -51,6 +52,17 @@ interface WorkspaceState {
     forkPointMessageId: string,
     position?: { x: number; y: number },
   ) => Promise<SessionId>;
+  /**
+   * Spawn N sibling forks from the user-message anchor at or before
+   * `anchorMessageId`, place them in a vertical fan to the right of the
+   * parent, and immediately broadcast the user message to each so all N
+   * stream in parallel. Returns the ids of the new fork sessions.
+   */
+  fanOut: (
+    parentSessionId: SessionId,
+    anchorMessageId: string,
+    count: number,
+  ) => Promise<SessionId[]>;
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
   /** Local-only title set — used when the backend has already persisted the
@@ -63,7 +75,7 @@ interface WorkspaceState {
 const positionPersistTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
 
 export const useWorkspaceStore = create<WorkspaceState>()(
-  immer((set) => ({
+  immer((set, get) => ({
     sessions: {},
     isHydrated: false,
     hydrationError: null,
@@ -108,7 +120,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // Read the parent from local state — its provider / model / transport
       // / system prompt all get inherited by the fork. The frontend is
       // authoritative for placement; the backend just stores what we send.
-      const parent = useWorkspaceStore.getState().sessions[parentId];
+      const parent = get().sessions[parentId];
       if (!parent) {
         throw new Error(`fork: parent session ${parentId} not in store`);
       }
@@ -134,6 +146,80 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         state.sessions[created.id] = fromIpc(created);
       });
       return created.id;
+    },
+
+    fanOut: async (parentSessionId, anchorMessageId, count) => {
+      if (count < 1) throw new Error("fan-out count must be >= 1");
+
+      const parent = get().sessions[parentSessionId];
+      if (!parent) {
+        throw new Error(`fan-out: parent ${parentSessionId} not in store`);
+      }
+
+      // Reach into messagesStore to determine the user prompt to broadcast
+      // and the fork point (= the message *before* that user message, so
+      // each fork inherits parent context up to but not including the prompt).
+      const msgs = useMessagesStore.getState();
+      const ids = msgs.bySession[parentSessionId] ?? [];
+      const anchorIdx = ids.indexOf(anchorMessageId);
+      if (anchorIdx === -1) {
+        throw new Error("fan-out: anchor message not in session");
+      }
+
+      // Walk back to find the user message at or before the anchor.
+      let userIdx = anchorIdx;
+      while (userIdx >= 0 && msgs.byId[ids[userIdx]]?.role !== "user") {
+        userIdx -= 1;
+      }
+      if (userIdx < 0) {
+        throw new Error("fan-out: no user message at or before anchor");
+      }
+
+      const userMessage = msgs.byId[ids[userIdx]];
+      if (!userMessage) throw new Error("fan-out: anchor user message missing");
+
+      const forkPointId = userIdx > 0 ? ids[userIdx - 1] : undefined;
+      const promptText = userMessage.content;
+
+      // Vertical fan layout: forks centered around parent.y, spaced so the
+      // 480px node height leaves a comfortable gap between siblings.
+      const baseX = parent.position.x + 460;
+      const spacing = 520;
+      const positions = Array.from({ length: count }, (_, i) => ({
+        x: baseX,
+        y: parent.position.y + (i - (count - 1) / 2) * spacing,
+      }));
+
+      // Create all N forks in parallel.
+      const created = await Promise.all(
+        positions.map((pos) =>
+          ipc.createSession({
+            providerId: parent.providerId,
+            modelId: parent.modelId,
+            transportId: parent.transportId,
+            title: "fork",
+            positionX: pos.x,
+            positionY: pos.y,
+            parentSessionId,
+            forkPointMessageId: forkPointId,
+          }),
+        ),
+      );
+
+      set((state) => {
+        for (const c of created) state.sessions[c.id] = fromIpc(c);
+      });
+
+      // Broadcast the user prompt to every new fork — they all stream their
+      // own variant in parallel. Failures here surface via the stream:error
+      // event, so we don't await individually.
+      for (const fork of created) {
+        ipc.startStream(fork.id, promptText).catch((err) => {
+          console.error(`fan-out broadcast to ${fork.id} failed`, err);
+        });
+      }
+
+      return created.map((c) => c.id);
     },
 
     updateSessionPosition: (id, position) => {
