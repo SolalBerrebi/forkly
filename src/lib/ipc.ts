@@ -30,6 +30,7 @@ export interface Session {
   workingDir: string | null;
   width: number | null;
   height: number | null;
+  positionLocked: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -76,6 +77,7 @@ export interface UpdateSessionInput {
   positionY?: number;
   width?: number;
   height?: number;
+  positionLocked?: number;
 }
 
 export const ipc = {

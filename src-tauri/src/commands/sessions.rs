@@ -11,7 +11,7 @@ const SELECT_SESSION_COLUMNS: &str = "
     position_x, position_y, parent_session_id, fork_point_message_id,
     merge_source_session_ids, workspace_id,
     input_tokens_total, output_tokens_total, last_activity_at, working_dir,
-    width, height,
+    width, height, position_locked,
     created_at, updated_at
 ";
 
@@ -152,6 +152,16 @@ pub async fn update_session(
         )
         .bind(w)
         .bind(h)
+        .bind(now)
+        .bind(&id)
+        .execute(pool)
+        .await?;
+    }
+    if let Some(locked) = patch.position_locked {
+        sqlx::query(
+            "UPDATE sessions SET position_locked = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(locked)
         .bind(now)
         .bind(&id)
         .execute(pool)

@@ -41,6 +41,9 @@ pub struct Session {
     /// User-overridden node dimensions; NULL means "use SessionNode default".
     pub width: Option<f64>,
     pub height: Option<f64>,
+    /// 1 once the user has manually dragged this node — auto-layout leaves
+    /// locked nodes where they are and only repositions unlocked ones.
+    pub position_locked: i64,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -87,4 +90,5 @@ pub struct UpdateSessionInput {
     pub position_y: Option<f64>,
     pub width: Option<f64>,
     pub height: Option<f64>,
+    pub position_locked: Option<i64>,
 }

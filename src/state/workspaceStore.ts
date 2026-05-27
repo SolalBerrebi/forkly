@@ -6,6 +6,7 @@ import {
   type TransportId,
   type Workspace as IpcWorkspace,
 } from "../lib/ipc";
+import { autoLayout } from "../canvas/layout/autoLayout";
 import { useMessagesStore } from "./messagesStore";
 
 export type SessionId = string;
@@ -40,6 +41,7 @@ export interface Session {
   workingDir: string | null;
   width: number | null;
   height: number | null;
+  positionLocked: boolean;
 }
 
 export interface AddSessionInput {
@@ -81,6 +83,7 @@ function fromIpc(s: IpcSession): Session {
     workingDir: s.workingDir,
     width: s.width,
     height: s.height,
+    positionLocked: s.positionLocked > 0,
   };
 }
 
@@ -129,6 +132,13 @@ interface WorkspaceState {
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
   updateSessionModel: (id: SessionId, modelId: string) => Promise<void>;
   applyTitleFromBackend: (id: SessionId, title: string) => void;
+  /**
+   * Run dagre auto-layout on the current workspace's sessions. Honours
+   * `positionLocked` — only emits position updates for unlocked nodes.
+   * When `unlockAll` is true (the explicit "Reorganize" button), every node
+   * is unlocked first so the whole tree snaps to a clean layout.
+   */
+  reorganizeCurrentWorkspace: (unlockAll?: boolean) => void;
   /** Apply per-session stats coming from the backend's session:stats event.
    *  Updates input/output token totals + lastActivityAt without a re-list. */
   applySessionStats: (
@@ -405,7 +415,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     updateSessionPosition: (id, position) => {
       set((state) => {
         const s = state.sessions[id];
-        if (s) s.position = position;
+        if (s) {
+          s.position = position;
+          // A drag from the user counts as a lock — auto-layout will leave
+          // this node alone going forward until they explicitly unlock via
+          // the Reorganize button.
+          s.positionLocked = true;
+        }
       });
 
       const existing = positionPersistTimers.get(id);
@@ -413,10 +429,54 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const handle = setTimeout(() => {
         positionPersistTimers.delete(id);
         ipc
-          .updateSession(id, { positionX: position.x, positionY: position.y })
+          .updateSession(id, {
+            positionX: position.x,
+            positionY: position.y,
+            positionLocked: 1,
+          })
           .catch((err) => console.error("position persist failed", err));
       }, 200);
       positionPersistTimers.set(id, handle);
+    },
+
+    reorganizeCurrentWorkspace: (unlockAll = false) => {
+      const state = get();
+      const currentWs = state.currentWorkspaceId;
+      const sessions = Object.values(state.sessions).filter(
+        (s) => s.workspaceId === currentWs,
+      );
+      if (sessions.length === 0) return;
+
+      const locked = new Set<SessionId>();
+      if (!unlockAll) {
+        for (const s of sessions) {
+          if (s.positionLocked) locked.add(s.id);
+        }
+      }
+
+      const { positions } = autoLayout(sessions, locked);
+
+      set((draft) => {
+        for (const [sid, pos] of Object.entries(positions)) {
+          const s = draft.sessions[sid];
+          if (s) {
+            s.position = pos;
+            if (unlockAll) s.positionLocked = false;
+          }
+        }
+      });
+
+      // Persist new positions (and the unlocked flag if applicable). Fire
+      // and forget; each call is independent.
+      for (const [sid, pos] of Object.entries(positions)) {
+        ipc
+          .updateSession(sid, {
+            positionX: pos.x,
+            positionY: pos.y,
+            ...(unlockAll ? { positionLocked: 0 } : {}),
+          })
+          .catch((err) => console.error("reorganize persist failed", err));
+      }
     },
 
     updateSessionSize: (id, width, height) => {

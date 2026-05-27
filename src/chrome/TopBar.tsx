@@ -1,5 +1,5 @@
 import { useReactFlow } from "@xyflow/react";
-import { GitFork, Moon, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
+import { GitFork, LayoutGrid, Moon, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 import { SettingsDialog } from "../settings/SettingsDialog";
@@ -9,6 +9,9 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function TopBar() {
   const addSession = useWorkspaceStore((s) => s.addSession);
+  const reorganizeCurrentWorkspace = useWorkspaceStore(
+    (s) => s.reorganizeCurrentWorkspace,
+  );
   const flow = useReactFlow();
   const [theme, setTheme] = useState<Theme>("dark");
 
@@ -23,6 +26,30 @@ export function TopBar() {
     setTheme(next);
     applyTheme(next);
   };
+
+  // Reorganize shortcut: ⌘⇧L (or Ctrl+Shift+L on Linux/Win) snaps every
+  // session in the current workspace into a clean dagre tree, unlocking
+  // any nodes the user had dragged.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isMeta = e.metaKey || e.ctrlKey;
+      if (!isMeta || !e.shiftKey) return;
+      if (e.key.toLowerCase() !== "l") return;
+      const tgt = e.target as HTMLElement | null;
+      if (
+        tgt &&
+        (tgt.tagName === "INPUT" ||
+          tgt.tagName === "TEXTAREA" ||
+          tgt.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      reorganizeCurrentWorkspace(true);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [reorganizeCurrentWorkspace]);
 
   const handleAdd = () => {
     const viewport = flow.getViewport();
@@ -47,6 +74,15 @@ export function TopBar() {
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2">
+        <Tooltip label="reorganize canvas · ⌘⇧L">
+          <button
+            onClick={() => reorganizeCurrentWorkspace(true)}
+            aria-label="Reorganize canvas"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/70 text-fg-muted backdrop-blur transition-colors hover:text-fg"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+          </button>
+        </Tooltip>
         <Tooltip label="auth & api keys">
           <SettingsDialog
             trigger={
