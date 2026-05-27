@@ -9,7 +9,7 @@ interface ChatViewProps {
 
 export function ChatView({ sessionId }: ChatViewProps) {
   const hydrate = useMessagesStore((s) => s.hydrateForSession);
-  const hydrated = useMessagesStore((s) => s.hydratedSessions.has(sessionId));
+  const hydrated = useMessagesStore((s) => !!s.hydratedSessions[sessionId]);
 
   useEffect(() => {
     if (!hydrated) {

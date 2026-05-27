@@ -11,8 +11,11 @@ interface MessagesState {
   streaming: Record<string, true>;
   /** Per-message error strings, if any. */
   errors: Record<string, string>;
-  /** Sessions whose messages we've already fetched. */
-  hydratedSessions: Set<string>;
+  /** Sessions whose messages we've already fetched. Plain Record (not Set)
+   *  because Immer doesn't support Set/Map without `enableMapSet()`, and a
+   *  Set inside Immer would also break Zustand's snapshot caching → React
+   *  "Maximum update depth exceeded" → renderer crash. */
+  hydratedSessions: Record<string, true>;
 
   hydrateForSession: (sessionId: string) => Promise<void>;
   addMessage: (message: Message) => void;
@@ -27,7 +30,7 @@ export const useMessagesStore = create<MessagesState>()(
     bySession: {},
     streaming: {},
     errors: {},
-    hydratedSessions: new Set<string>(),
+    hydratedSessions: {},
 
     hydrateForSession: async (sessionId) => {
       const rows = await ipc.listMessages(sessionId);
@@ -37,7 +40,7 @@ export const useMessagesStore = create<MessagesState>()(
           state.byId[m.id] = m;
           state.bySession[sessionId].push(m.id);
         }
-        state.hydratedSessions.add(sessionId);
+        state.hydratedSessions[sessionId] = true;
       });
     },
 

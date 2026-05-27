@@ -77,13 +77,12 @@ pub fn run() {
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
-                // Bounce the Dock icon so the user can find the app even if
-                // focus gets stolen by their terminal / IDE on launch. Stops
-                // bouncing as soon as they click it.
                 let _ = window.request_user_attention(Some(
                     tauri::UserAttentionType::Critical,
                 ));
-                tracing::info!("main window shown + focused + attention requested");
+                #[cfg(debug_assertions)]
+                window.open_devtools();
+                tracing::info!("main window shown + focused + devtools opened");
             } else {
                 tracing::error!("main window not found at setup");
             }
