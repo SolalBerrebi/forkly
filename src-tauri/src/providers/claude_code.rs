@@ -254,7 +254,7 @@ pub struct DetectionStatus {
 }
 
 pub async fn detect() -> DetectionStatus {
-    // Step 1: is `claude` on PATH and runnable?
+    // Is `claude` on PATH and runnable?
     let version_out = Command::new("claude").arg("--version").output().await;
 
     let (installed, version) = match version_out {
@@ -265,24 +265,21 @@ pub async fn detect() -> DetectionStatus {
         _ => return DetectionStatus { installed: false, version: None, logged_in: false },
     };
 
-    // Step 2: is the user logged in? `claude auth` lists configured auth and exits 0.
-    // We avoid making an actual inference call (would cost a token and 1-2s).
-    // The simplest non-stale check: run a near-zero-cost subprocess that fails
-    // distinctly if not logged in. `claude config get -g theme` works for that.
-    let logged_in = Command::new("claude")
-        .args(["config", "get", "-g", "theme"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await
-        .map(|s| s.success())
-        .unwrap_or(false);
-
+    // We intentionally do NOT pre-emptively check login state. Claude Code
+    // stores its OAuth tokens in the macOS keychain / equivalent secure store,
+    // and there's no fast public command to query auth status without making
+    // an inference call (which would cost a token + 1-2s per status check).
+    //
+    // Instead: if the user isn't logged in, the first `start_stream` call
+    // will fail and our error-mapping in stream_chat() surfaces a clear
+    // "run `claude login` in your terminal" message in the chat bubble.
+    // Optimistic-status here keeps the Settings dialog responsive and
+    // avoids false negatives like the one Solal hit on 2026-05-27 where
+    // `claude config get -g theme` returned non-zero despite being logged in.
     DetectionStatus {
         installed,
         version,
-        logged_in,
+        logged_in: installed,
     }
 }
 
