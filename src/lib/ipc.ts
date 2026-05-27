@@ -57,4 +57,11 @@ export const ipc = {
 
   listMessages: (sessionId: string) =>
     invoke<Message[]>("list_messages", { sessionId }),
+
+  hasApiKey: (provider: string) =>
+    invoke<boolean>("has_api_key", { provider }),
+  setApiKey: (provider: string, key: string) =>
+    invoke<void>("set_api_key", { provider, key }),
+  deleteApiKey: (provider: string) =>
+    invoke<void>("delete_api_key", { provider }),
 };

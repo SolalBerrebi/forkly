@@ -1,7 +1,8 @@
 import { useReactFlow } from "@xyflow/react";
-import { GitFork, Moon, Plus, Sun } from "lucide-react";
+import { GitFork, Moon, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
+import { SettingsDialog } from "../settings/SettingsDialog";
 import { useWorkspaceStore } from "../state/workspaceStore";
 
 export function TopBar() {
@@ -41,6 +42,16 @@ export function TopBar() {
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2">
+        <SettingsDialog
+          trigger={
+            <button
+              aria-label="Settings"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/70 text-fg-muted backdrop-blur transition-colors hover:text-fg"
+            >
+              <SettingsIcon className="h-3.5 w-3.5" />
+            </button>
+          }
+        />
         <button
           onClick={toggleTheme}
           aria-label="Toggle theme"

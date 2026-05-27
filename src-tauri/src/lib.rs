@@ -43,6 +43,9 @@ pub fn run() {
             commands::sessions::update_session,
             commands::sessions::delete_session,
             commands::messages::list_messages,
+            commands::secrets::has_api_key,
+            commands::secrets::set_api_key,
+            commands::secrets::delete_api_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
