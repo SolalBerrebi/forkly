@@ -81,6 +81,9 @@ export const ipc = {
 
   detectClaudeCode: () =>
     invoke<ClaudeCodeStatus>("detect_claude_code"),
+
+  autoTitle: (sessionId: string) =>
+    invoke<string>("auto_title", { sessionId }),
 };
 
 // Tauri events emitted from start_stream.

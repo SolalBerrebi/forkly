@@ -127,6 +127,7 @@ pub fn run() {
             commands::secrets::delete_api_key,
             commands::stream::start_stream,
             commands::stream::detect_claude_code,
+            commands::titling::auto_title,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

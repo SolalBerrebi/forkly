@@ -53,6 +53,10 @@ interface WorkspaceState {
   ) => Promise<SessionId>;
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
+  /** Local-only title set — used when the backend has already persisted the
+   *  new title (e.g., after the auto-titling command). Avoids a redundant
+   *  round-trip back to the DB. */
+  applyTitleFromBackend: (id: SessionId, title: string) => void;
   removeSession: (id: SessionId) => Promise<void>;
 }
 
@@ -157,6 +161,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (s) s.title = title;
       });
       await ipc.updateSession(id, { title });
+    },
+
+    applyTitleFromBackend: (id, title) => {
+      set((state) => {
+        const s = state.sessions[id];
+        if (s) s.title = title;
+      });
     },
 
     removeSession: async (id) => {

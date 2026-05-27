@@ -5,7 +5,15 @@ import type {
   StreamErrorPayload,
   StreamStartPayload,
 } from "./ipc";
+import { ipc } from "./ipc";
 import { useMessagesStore } from "../state/messagesStore";
+import { useWorkspaceStore } from "../state/workspaceStore";
+
+// Default titles assigned at session creation. If a session still has one of
+// these after the first assistant response completes, the auto-titling pass
+// kicks in. After auto-titling sets something meaningful, the title stays
+// stable across subsequent turns (we only re-title from a default).
+const DEFAULT_TITLES = new Set(["untitled session", "fork"]);
 
 /**
  * Subscribe to backend stream:* events and route them into the messages store.
@@ -33,6 +41,7 @@ export async function subscribeStreamEvents(): Promise<UnlistenFn> {
   unsubs.push(
     await listen<StreamDonePayload>("stream:done", (e) => {
       finishStream(e.payload.assistantMessageId, e.payload.content);
+      maybeAutoTitle(e.payload.sessionId);
     }),
   );
 
@@ -47,4 +56,27 @@ export async function subscribeStreamEvents(): Promise<UnlistenFn> {
   );
 
   return () => unsubs.forEach((u) => u());
+}
+
+/**
+ * Fire-and-forget: if the session still has a default placeholder title,
+ * kick off a cheap Haiku call to summarize the exchange into 4 words.
+ */
+function maybeAutoTitle(sessionId: string) {
+  const session = useWorkspaceStore.getState().sessions[sessionId];
+  if (!session) return;
+  if (!DEFAULT_TITLES.has(session.title.toLowerCase())) return;
+
+  ipc
+    .autoTitle(sessionId)
+    .then((title) => {
+      if (title && title !== session.title) {
+        useWorkspaceStore.getState().applyTitleFromBackend(sessionId, title);
+      }
+    })
+    .catch((err) => {
+      // Titling is best-effort. A failure here shouldn't surface to the user;
+      // they can rename manually later. Just log for debugging.
+      console.warn("auto-title failed", err);
+    });
 }
