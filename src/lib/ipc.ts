@@ -64,4 +64,34 @@ export const ipc = {
     invoke<void>("set_api_key", { provider, key }),
   deleteApiKey: (provider: string) =>
     invoke<void>("delete_api_key", { provider }),
+
+  startStream: (sessionId: string, userMessage: string) =>
+    invoke<void>("start_stream", { sessionId, userMessage }),
 };
+
+// Tauri events emitted from start_stream.
+export interface StreamStartPayload {
+  sessionId: string;
+  userMessage: Message;
+  assistantMessage: Message;
+}
+
+export interface StreamDeltaPayload {
+  sessionId: string;
+  assistantMessageId: string;
+  delta: string;
+}
+
+export interface StreamDonePayload {
+  sessionId: string;
+  assistantMessageId: string;
+  content: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+export interface StreamErrorPayload {
+  sessionId: string;
+  assistantMessageId: string | null;
+  error: string;
+}
