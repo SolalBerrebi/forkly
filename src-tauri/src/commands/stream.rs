@@ -9,6 +9,7 @@ use crate::providers::{
 use crate::types::{Message, Session};
 use crate::AppState;
 use serde::Serialize;
+use std::fmt::Write as _;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 
@@ -84,56 +85,70 @@ pub async fn start_stream(
     .fetch_one(&pool)
     .await?;
 
-    // 3. Resolve transport-specific auth BEFORE any destructive writes.
+    // 3. Pre-flight: read transport-specific auth BEFORE any destructive writes.
     //    If auth fails, the user message never gets persisted — clean failure.
-    let dispatch = match session.transport_id.as_str() {
-        "claude-code" => Dispatch::ClaudeCode(ClaudeCodeRequest {
-            model: session.model_id.clone(),
-            system_prompt: session.system_prompt.clone(),
-            user_message: user_message.clone(),
-            session_id: session.id.clone(),
-            is_resume: prior_message_count > 0,
-        }),
-        "api" => {
-            let api_key = read_api_key(&session.provider_id)?;
-            // History is built AFTER persisting the user message below.
-            // Build a placeholder request now; we'll fill `messages` in step 5.
-            Dispatch::Api(ApiStreamRequest {
-                model: session.model_id.clone(),
-                system_prompt: session.system_prompt.clone(),
-                messages: vec![], // populated below
-                max_tokens: 4096,
-                api_key,
-            })
-        }
-        other => {
-            return Err(AppError::BadRequest(format!(
-                "unsupported transport: {other}"
-            )))
-        }
+    let api_key = if session.transport_id == "api" {
+        Some(read_api_key(&session.provider_id)?)
+    } else if session.transport_id != "claude-code" {
+        return Err(AppError::BadRequest(format!(
+            "unsupported transport: {}",
+            session.transport_id
+        )));
+    } else {
+        None
     };
 
     // 4. Persist user message.
     let user_msg =
         insert_message(&pool, &session.id, "user", &user_message, None, None).await?;
 
-    // 5. For the API transport, build the full conversation history (now
-    //    includes the user message we just persisted). The CC transport
-    //    doesn't need this — CC owns its own session state.
-    let dispatch = match dispatch {
-        Dispatch::Api(mut req) => {
-            let history = build_history(&pool, &session.id).await?;
-            req.messages = history
+    // 5. Build the full conversation history (now includes the user message
+    //    we just persisted). Used by both transports:
+    //      - API: the canonical `messages` array sent to /v1/messages
+    //      - CC fork's first turn: the inherited portion gets prepended as
+    //        a prelude inside the new user message, because Claude Code's
+    //        --input-format stream-json does NOT accept assistant turns as
+    //        actual prior turns (probed 2026-05-27).
+    let history = build_history(&pool, &session.id).await?;
+
+    // 6. Build the dispatch.
+    let dispatch = match session.transport_id.as_str() {
+        "api" => Dispatch::Api(ApiStreamRequest {
+            model: session.model_id.clone(),
+            system_prompt: session.system_prompt.clone(),
+            messages: history
                 .iter()
                 .filter(|m| m.role != "system")
                 .map(|m| ChatMessage {
                     role: m.role.clone(),
                     content: m.content.clone(),
                 })
-                .collect();
-            Dispatch::Api(req)
+                .collect(),
+            max_tokens: 4096,
+            api_key: api_key.expect("api_key resolved above"),
+        }),
+        "claude-code" => {
+            let is_fork_first_turn =
+                session.parent_session_id.is_some() && prior_message_count == 0;
+
+            let cc_user_message = if is_fork_first_turn {
+                // Inherited history = everything in `history` except the
+                // just-persisted user message (which is the last element).
+                let inherited = &history[..history.len().saturating_sub(1)];
+                format_fork_prelude(inherited, &user_message)
+            } else {
+                user_message.clone()
+            };
+
+            Dispatch::ClaudeCode(ClaudeCodeRequest {
+                model: session.model_id.clone(),
+                system_prompt: session.system_prompt.clone(),
+                user_message: cc_user_message,
+                session_id: session.id.clone(),
+                is_resume: prior_message_count > 0,
+            })
         }
-        cc => cc,
+        _ => unreachable!("validated above"),
     };
 
     // 6. Persist an empty assistant message; we'll fill content as we stream.
@@ -249,6 +264,41 @@ pub async fn start_stream(
 #[tauri::command]
 pub async fn detect_claude_code() -> crate::providers::claude_code::DetectionStatus {
     crate::providers::claude_code::detect().await
+}
+
+/// Render the inherited history as a prelude that gets prepended to the
+/// first user message of a forked Claude Code session.
+///
+/// We can't pass real prior turns to `claude --input-format stream-json` —
+/// it only honors user messages from stdin, not assistant messages (probed
+/// 2026-05-27 on CC 2.1.152). So inherited context has to live inside the
+/// new user-message string for the very first turn after a fork. Once that
+/// turn lands in CC's session storage, subsequent turns can `--resume` and
+/// everything chains naturally.
+fn format_fork_prelude(inherited: &[Message], new_user_message: &str) -> String {
+    let mut out = String::with_capacity(2048);
+    out.push_str(
+        "<prior_conversation>\n\
+         The following exchanges happened in a parent conversation that \
+         this one was forked from. Treat them as your real prior context — \
+         the user already saw your earlier responses and is now asking the \
+         new question below. Do not comment on the fork or repeat \
+         yourself; just respond to the new message with full awareness of \
+         what's been said.\n\
+         ---\n",
+    );
+    for m in inherited {
+        let role = match m.role.as_str() {
+            "user" => "USER",
+            "assistant" => "ASSISTANT",
+            _ => continue,
+        };
+        let _ = writeln!(out, "{role}: {}", m.content);
+        out.push('\n');
+    }
+    out.push_str("---\n</prior_conversation>\n\n");
+    out.push_str(new_user_message);
+    out
 }
 
 fn emit_error(app: &AppHandle, session_id: &str, assistant_id: Option<&str>, error: String) {
