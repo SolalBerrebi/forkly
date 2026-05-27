@@ -128,7 +128,24 @@ export const ipc = {
 
   gitBranchFor: (cwd: string) =>
     invoke<string | null>("git_branch_for", { cwd }),
+
+  listNetLog: (limit?: number) =>
+    invoke<NetLogEntry[]>("list_net_log", { limit }),
+  clearNetLog: () => invoke<void>("clear_net_log"),
 };
+
+export interface NetLogEntry {
+  id: string;
+  timestampMs: number;
+  transport: string;
+  method: string;
+  status: string;
+  durationMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  sessionId: string | null;
+  detail: string | null;
+}
 
 export interface SessionStatsPayload {
   sessionId: string;

@@ -1,9 +1,10 @@
 import { useReactFlow } from "@xyflow/react";
-import { GitFork, LayoutGrid, Moon, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
+import { Activity, GitFork, LayoutGrid, Moon, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { useWorkspaceStore } from "../state/workspaceStore";
+import { NetworkLogDrawer } from "./NetworkLogDrawer";
 import { Tooltip } from "./Tooltip";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
@@ -14,6 +15,7 @@ export function TopBar() {
   );
   const flow = useReactFlow();
   const [theme, setTheme] = useState<Theme>("dark");
+  const [netLogOpen, setNetLogOpen] = useState(false);
 
   useEffect(() => {
     const initial = getInitialTheme();
@@ -27,14 +29,13 @@ export function TopBar() {
     applyTheme(next);
   };
 
-  // Reorganize shortcut: ⌘⇧L (or Ctrl+Shift+L on Linux/Win) snaps every
-  // session in the current workspace into a clean dagre tree, unlocking
-  // any nodes the user had dragged.
+  // Global chrome shortcuts:
+  //   ⌘⇧L → reorganize the current workspace (unlock all)
+  //   ⌘⇧N → toggle the network log drawer
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey;
       if (!isMeta || !e.shiftKey) return;
-      if (e.key.toLowerCase() !== "l") return;
       const tgt = e.target as HTMLElement | null;
       if (
         tgt &&
@@ -44,8 +45,14 @@ export function TopBar() {
       ) {
         return;
       }
-      e.preventDefault();
-      reorganizeCurrentWorkspace(true);
+      const key = e.key.toLowerCase();
+      if (key === "l") {
+        e.preventDefault();
+        reorganizeCurrentWorkspace(true);
+      } else if (key === "n") {
+        e.preventDefault();
+        setNetLogOpen((prev) => !prev);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -74,6 +81,15 @@ export function TopBar() {
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2">
+        <Tooltip label="network log · ⌘⇧N">
+          <button
+            onClick={() => setNetLogOpen(true)}
+            aria-label="Network log"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/70 text-fg-muted backdrop-blur transition-colors hover:text-fg"
+          >
+            <Activity className="h-3.5 w-3.5" />
+          </button>
+        </Tooltip>
         <Tooltip label="reorganize canvas · ⌘⇧L">
           <button
             onClick={() => reorganizeCurrentWorkspace(true)}
@@ -114,6 +130,7 @@ export function TopBar() {
           </button>
         </Tooltip>
       </div>
+      <NetworkLogDrawer open={netLogOpen} onClose={() => setNetLogOpen(false)} />
     </header>
   );
 }

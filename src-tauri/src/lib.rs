@@ -14,12 +14,14 @@ use tauri::Manager;
 /// never gets a chance to register.
 pub struct AppState {
     db_cell: OnceLock<SqlitePool>,
+    pub net_log: commands::net_log::NetLog,
 }
 
 impl AppState {
     fn new() -> Self {
         Self {
             db_cell: OnceLock::new(),
+            net_log: commands::net_log::NetLog::new(),
         }
     }
 
@@ -134,6 +136,8 @@ pub fn run() {
             commands::workspaces::rename_workspace,
             commands::workspaces::delete_workspace,
             commands::git::git_branch_for,
+            commands::net_log::list_net_log,
+            commands::net_log::clear_net_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,4 +1,5 @@
 use crate::commands::messages::{build_history, insert_message, update_message_content};
+use crate::commands::net_log::{self, LogEntry};
 use crate::commands::secrets::read_api_key;
 use crate::error::{AppError, AppResult};
 use crate::providers::{
@@ -205,6 +206,9 @@ pub async fn start_stream(
     let app_for_task = app.clone();
     let session_id_for_task = session.id.clone();
     let assistant_id = assistant_msg.id.clone();
+    let transport_for_log = session.transport_id.clone();
+    let model_for_log = session.model_id.clone();
+    let log_started_at = crate::db::now_ms();
 
     tauri::async_runtime::spawn(async move {
         let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
@@ -299,6 +303,22 @@ pub async fn start_stream(
                         .ok();
                 }
 
+                net_log::record(
+                    &app_for_task,
+                    LogEntry {
+                        id: net_log::new_entry_id(),
+                        timestamp_ms: log_started_at,
+                        transport: transport_for_log.clone(),
+                        method: log_method(&transport_for_log, &model_for_log),
+                        status: "ok".to_string(),
+                        duration_ms: Some(now - log_started_at),
+                        input_tokens,
+                        output_tokens,
+                        session_id: Some(session_id_for_task.clone()),
+                        detail: None,
+                    },
+                );
+
                 app_for_task
                     .emit(
                         "stream:done",
@@ -313,11 +333,27 @@ pub async fn start_stream(
                     .ok();
             }
             Err(e) => {
+                let err_str = e.to_string();
+                net_log::record(
+                    &app_for_task,
+                    LogEntry {
+                        id: net_log::new_entry_id(),
+                        timestamp_ms: log_started_at,
+                        transport: transport_for_log.clone(),
+                        method: log_method(&transport_for_log, &model_for_log),
+                        status: format!("error: {}", err_str.chars().take(80).collect::<String>()),
+                        duration_ms: Some(crate::db::now_ms() - log_started_at),
+                        input_tokens,
+                        output_tokens,
+                        session_id: Some(session_id_for_task.clone()),
+                        detail: Some(err_str.clone()),
+                    },
+                );
                 emit_error(
                     &app_for_task,
                     &session_id_for_task,
                     Some(&assistant_id),
-                    e.to_string(),
+                    err_str,
                 );
             }
         }
@@ -416,6 +452,14 @@ fn format_fork_prelude(inherited: &[Message], new_user_message: &str) -> String 
     out.push_str("---\n</prior_conversation>\n\n");
     out.push_str(new_user_message);
     out
+}
+
+fn log_method(transport: &str, model: &str) -> String {
+    match transport {
+        "claude-code" => format!("claude --print --model {model}"),
+        "api" => format!("POST /v1/messages (model={model})"),
+        other => format!("{other} (model={model})"),
+    }
 }
 
 fn emit_error(app: &AppHandle, session_id: &str, assistant_id: Option<&str>, error: String) {
