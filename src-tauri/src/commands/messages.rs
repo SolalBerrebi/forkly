@@ -22,7 +22,7 @@ pub async fn list_messages(
     );
     let rows = sqlx::query_as::<_, Message>(&sql)
         .bind(&session_id)
-        .fetch_all(&state.db)
+        .fetch_all(state.db().await?)
         .await?;
     Ok(rows)
 }

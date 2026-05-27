@@ -14,10 +14,11 @@ const SELECT_SESSION_COLUMNS: &str = "
 
 #[tauri::command]
 pub async fn list_sessions(state: State<'_, AppState>) -> AppResult<Vec<Session>> {
+    let pool = state.db().await?;
     let sql = format!(
         "SELECT {SELECT_SESSION_COLUMNS} FROM sessions ORDER BY created_at ASC"
     );
-    let rows = sqlx::query_as::<_, Session>(&sql).fetch_all(&state.db).await?;
+    let rows = sqlx::query_as::<_, Session>(&sql).fetch_all(pool).await?;
     Ok(rows)
 }
 
@@ -26,6 +27,7 @@ pub async fn create_session(
     state: State<'_, AppState>,
     input: CreateSessionInput,
 ) -> AppResult<Session> {
+    let pool = state.db().await?;
     let id = Uuid::new_v4().to_string();
     let now = now_ms();
     let title = input.title.unwrap_or_else(|| "untitled session".to_string());
@@ -54,10 +56,10 @@ pub async fn create_session(
     .bind(&input.fork_point_message_id)
     .bind(now)
     .bind(now)
-    .execute(&state.db)
+    .execute(pool)
     .await?;
 
-    fetch_session(&state.db, &id).await
+    fetch_session(pool, &id).await
 }
 
 #[tauri::command]
@@ -66,6 +68,7 @@ pub async fn update_session(
     id: String,
     patch: UpdateSessionInput,
 ) -> AppResult<Session> {
+    let pool = state.db().await?;
     let now = now_ms();
 
     if let Some(title) = &patch.title {
@@ -73,7 +76,7 @@ pub async fn update_session(
             .bind(title)
             .bind(now)
             .bind(&id)
-            .execute(&state.db)
+            .execute(pool)
             .await?;
     }
     if let Some(pid) = &patch.provider_id {
@@ -81,7 +84,7 @@ pub async fn update_session(
             .bind(pid)
             .bind(now)
             .bind(&id)
-            .execute(&state.db)
+            .execute(pool)
             .await?;
     }
     if let Some(mid) = &patch.model_id {
@@ -89,7 +92,7 @@ pub async fn update_session(
             .bind(mid)
             .bind(now)
             .bind(&id)
-            .execute(&state.db)
+            .execute(pool)
             .await?;
     }
     if let Some(tid) = &patch.transport_id {
@@ -97,7 +100,7 @@ pub async fn update_session(
             .bind(tid)
             .bind(now)
             .bind(&id)
-            .execute(&state.db)
+            .execute(pool)
             .await?;
     }
     if let Some(sp) = &patch.system_prompt {
@@ -105,7 +108,7 @@ pub async fn update_session(
             .bind(sp)
             .bind(now)
             .bind(&id)
-            .execute(&state.db)
+            .execute(pool)
             .await?;
     }
     if let (Some(px), Some(py)) = (patch.position_x, patch.position_y) {
@@ -116,18 +119,19 @@ pub async fn update_session(
         .bind(py)
         .bind(now)
         .bind(&id)
-        .execute(&state.db)
+        .execute(pool)
         .await?;
     }
 
-    fetch_session(&state.db, &id).await
+    fetch_session(pool, &id).await
 }
 
 #[tauri::command]
 pub async fn delete_session(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    let pool = state.db().await?;
     let result = sqlx::query("DELETE FROM sessions WHERE id = ?")
         .bind(&id)
-        .execute(&state.db)
+        .execute(pool)
         .await?;
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("session {id}")));
@@ -136,9 +140,7 @@ pub async fn delete_session(state: State<'_, AppState>, id: String) -> AppResult
 }
 
 async fn fetch_session(pool: &SqlitePool, id: &str) -> AppResult<Session> {
-    let sql = format!(
-        "SELECT {SELECT_SESSION_COLUMNS} FROM sessions WHERE id = ?"
-    );
+    let sql = format!("SELECT {SELECT_SESSION_COLUMNS} FROM sessions WHERE id = ?");
     sqlx::query_as::<_, Session>(&sql)
         .bind(id)
         .fetch_optional(pool)

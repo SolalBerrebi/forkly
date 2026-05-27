@@ -60,7 +60,7 @@ pub async fn start_stream(
     session_id: String,
     user_message: String,
 ) -> AppResult<()> {
-    let pool = state.db.clone();
+    let pool = state.db().await?.clone();
 
     // 1. Look up session
     let session = sqlx::query_as::<_, Session>(
