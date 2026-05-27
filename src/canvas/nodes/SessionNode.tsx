@@ -108,10 +108,13 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
             : "border-border hover:border-border-strong",
         ].join(" ")}
       >
-        {/* NodeResizer hidden while expanded — the expand preset owns the
-            dimensions until the user collapses back. */}
+        {/* Always-mounted (unless expanded) so the resize cursor shows the
+            instant you hover an edge — no click-to-select required. Visual
+            chrome (handle squares + accent border) is faded in via the
+            .react-flow__resize-control rules in globals.css when the node
+            is hovered or selected. */}
         <NodeResizer
-          isVisible={selected && !isExpanded}
+          isVisible={!isExpanded}
           minWidth={MIN_WIDTH}
           minHeight={MIN_HEIGHT}
           maxWidth={MAX_WIDTH}

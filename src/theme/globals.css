@@ -105,6 +105,22 @@ html[data-theme="light"] {
   border-radius: 9999px !important;
 }
 
+/* NodeResizer chrome — handles and edge lines are always mounted (so the
+   resize cursor is available immediately when the user hovers a session
+   edge), but visually they fade in on node hover / selection so the canvas
+   isn't littered with handle dots on every cell at rest. */
+.react-flow__resize-control.handle,
+.react-flow__resize-control.line {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.react-flow__node:hover .react-flow__resize-control.handle,
+.react-flow__node:hover .react-flow__resize-control.line,
+.react-flow__node.selected .react-flow__resize-control.handle,
+.react-flow__node.selected .react-flow__resize-control.line {
+  opacity: 1;
+}
+
 @keyframes lineage-flow {
   to { stroke-dashoffset: -10; }
 }
