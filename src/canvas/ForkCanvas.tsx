@@ -9,6 +9,7 @@ import {
   type OnSelectionChangeParams,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "../chrome/ConfirmDialog";
 import { useMessagesStore } from "../state/messagesStore";
 import { useWorkspaceStore } from "../state/workspaceStore";
 import { LineageEdge, type LineageEdgeType } from "./edges/LineageEdge";
@@ -35,12 +36,14 @@ export function ForkCanvas() {
   const sessions = useWorkspaceStore((s) => s.sessions);
   const updatePosition = useWorkspaceStore((s) => s.updateSessionPosition);
   const mergeSessions = useWorkspaceStore((s) => s.mergeSessions);
+  const removeSession = useWorkspaceStore((s) => s.removeSession);
   // Subscribe ONLY to start/stop transitions, not to every token delta —
   // edges depend on this, so observing per-delta state caused the infinite
   // render storm + 12GB memory blowout.
   const streamingSessions = useMessagesStore((s) => s.streamingSessions);
 
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [deleteCandidates, setDeleteCandidates] = useState<string[] | null>(null);
 
   const nodes = useMemo<SessionNodeType[]>(
     () =>
@@ -105,30 +108,50 @@ export function ForkCanvas() {
     [],
   );
 
-  // M shortcut: when 2+ session nodes are selected, press M to spawn a
-  // merge node that synthesizes their final responses.
+  // Canvas-level keyboard shortcuts.
+  //  - M (no modifiers, 2+ nodes selected): spawn a merge synthesis
+  //  - Delete / Backspace (1+ nodes selected): trigger delete confirm dialog
   useEffect(() => {
+    const isTypingTarget = (el: HTMLElement | null) =>
+      !!el &&
+      (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+
     const handler = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "m") return;
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const tgt = e.target as HTMLElement | null;
-      if (
-        tgt &&
-        (tgt.tagName === "INPUT" ||
-          tgt.tagName === "TEXTAREA" ||
-          tgt.isContentEditable)
-      ) {
+      if (isTypingTarget(tgt)) return;
+
+      // Merge
+      if (e.key.toLowerCase() === "m" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        if (selectedNodeIds.length < 2) return;
+        e.preventDefault();
+        mergeSessions(selectedNodeIds).catch((err) =>
+          console.error("merge failed", err),
+        );
         return;
       }
-      if (selectedNodeIds.length < 2) return;
-      e.preventDefault();
-      mergeSessions(selectedNodeIds).catch((err) => {
-        console.error("merge failed", err);
-      });
+
+      // Delete via Delete or Backspace
+      if ((e.key === "Delete" || e.key === "Backspace") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (selectedNodeIds.length === 0) return;
+        e.preventDefault();
+        setDeleteCandidates(selectedNodeIds);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [selectedNodeIds, mergeSessions]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    const ids = deleteCandidates ?? [];
+    await Promise.all(
+      ids.map((id) =>
+        removeSession(id).catch((err) => {
+          console.error(`delete session ${id} failed`, err);
+        }),
+      ),
+    );
+    setDeleteCandidates(null);
+  }, [deleteCandidates, removeSession]);
 
   const isEmpty = nodes.length === 0;
 
@@ -149,6 +172,8 @@ export function ForkCanvas() {
       zoomOnDoubleClick={false}
       selectionOnDrag
       panOnDrag={PAN_ON_DRAG}
+      // We handle delete ourselves to show a confirm dialog before destroying state.
+      deleteKeyCode={null}
     >
       <CrossGrid />
       {isEmpty && (
@@ -186,6 +211,28 @@ export function ForkCanvas() {
         maskColor="color-mix(in srgb, var(--color-bg) 75%, transparent)"
         nodeColor="var(--color-fg-muted)"
         nodeStrokeColor="transparent"
+      />
+      <ConfirmDialog
+        open={deleteCandidates !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCandidates(null);
+        }}
+        title={
+          (deleteCandidates?.length ?? 0) > 1
+            ? `delete ${deleteCandidates?.length} sessions?`
+            : "delete this session?"
+        }
+        description={
+          <>
+            This permanently removes the selected{" "}
+            {(deleteCandidates?.length ?? 0) > 1 ? "sessions" : "session"} and all
+            their messages. Any forks descending from them stay on the canvas
+            but no longer share lineage.
+          </>
+        }
+        confirmLabel="delete"
+        destructive
+        onConfirm={handleConfirmDelete}
       />
     </ReactFlow>
   );

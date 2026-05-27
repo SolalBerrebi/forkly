@@ -1,3 +1,4 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Handle,
   Position,
@@ -6,9 +7,12 @@ import {
   type NodeProps,
   type ReactFlowState,
 } from "@xyflow/react";
-import { GitFork } from "lucide-react";
-import { useMessagesStore } from "../../state/messagesStore";
+import { GitFork, MoreHorizontal, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { ChatView } from "../../chat/ChatView";
+import { ConfirmDialog } from "../../chrome/ConfirmDialog";
+import { useMessagesStore } from "../../state/messagesStore";
+import { useWorkspaceStore } from "../../state/workspaceStore";
 
 export interface SessionNodeData extends Record<string, unknown> {
   title: string;
@@ -36,45 +40,99 @@ const EMPTY_IDS: string[] = [];
 
 export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) {
   const zoom = useStore(zoomSelector);
+  const removeSession = useWorkspaceStore((s) => s.removeSession);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   const mode: "full" | "compact" | "label" =
     zoom >= FULL_MIN_ZOOM ? "full" : zoom >= COMPACT_MIN_ZOOM ? "compact" : "label";
 
-  return (
-    <div
-      className={[
-        "group relative flex h-[460px] w-90 flex-col overflow-hidden rounded-[12px] border bg-bg-elevated",
-        "shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)] transition-all duration-200",
-        selected
-          ? "border-transparent ring-1 ring-accent-from shadow-[0_0_0_1px_var(--color-accent-from),0_0_60px_-8px_color-mix(in_srgb,var(--color-accent-from)_55%,transparent)]"
-          : "border-border hover:border-border-strong",
-      ].join(" ")}
-    >
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="h-2! w-2! border-0! bg-fg-subtle! opacity-0 transition-opacity group-hover:opacity-100"
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="h-2! w-2! border-0! bg-fg-subtle! opacity-0 transition-opacity group-hover:opacity-100"
-      />
+  const handleDelete = async () => {
+    try {
+      await removeSession(id);
+    } catch (err) {
+      console.error("delete session failed", err);
+    }
+  };
 
-      {/* Header — same across all modes; just a thin identification strip. */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-bg text-accent-from">
-          <GitFork className="h-3.5 w-3.5" />
+  return (
+    <>
+      <div
+        className={[
+          "group relative flex h-115 w-90 flex-col overflow-hidden rounded-[12px] border bg-bg-elevated",
+          "shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)] transition-all duration-200",
+          selected
+            ? "border-transparent ring-1 ring-accent-from shadow-[0_0_0_1px_var(--color-accent-from),0_0_60px_-8px_color-mix(in_srgb,var(--color-accent-from)_55%,transparent)]"
+            : "border-border hover:border-border-strong",
+        ].join(" ")}
+      >
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="h-2! w-2! border-0! bg-fg-subtle! opacity-0 transition-opacity group-hover:opacity-100"
+        />
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="h-2! w-2! border-0! bg-fg-subtle! opacity-0 transition-opacity group-hover:opacity-100"
+        />
+
+        {/* Header — same across all modes; thin identification strip with a
+            hover-revealed "..." menu for per-node actions (delete, etc.). */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-bg text-accent-from">
+            <GitFork className="h-3.5 w-3.5" />
+          </div>
+          <div className="flex-1 truncate font-mono text-xs text-fg">{data.title}</div>
+          <div className="rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted">
+            {data.providerId}
+          </div>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                aria-label="Session actions"
+                className="flex h-5 w-5 items-center justify-center rounded text-fg-subtle opacity-0 transition-all group-hover:opacity-100 hover:bg-bg hover:text-fg"
+              >
+                <MoreHorizontal className="h-3 w-3" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="end"
+                sideOffset={4}
+                className="z-50 min-w-40 overflow-hidden rounded-md border border-border bg-bg-elevated p-1 shadow-xl"
+              >
+                <DropdownMenu.Item
+                  onSelect={() => setConfirmOpen(true)}
+                  className="flex items-center gap-2 rounded px-2 py-1.5 font-mono text-[11px] text-danger outline-none data-highlighted:bg-danger/10"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  delete session
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
-        <div className="flex-1 truncate font-mono text-xs text-fg">{data.title}</div>
-        <div className="rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted">
-          {data.providerId}
-        </div>
+
+        {mode === "full" && <ChatView sessionId={id} />}
+        {mode === "compact" && <CompactBody sessionId={id} data={data} />}
+        {mode === "label" && <LabelBody data={data} />}
       </div>
 
-      {mode === "full" && <ChatView sessionId={id} />}
-      {mode === "compact" && <CompactBody sessionId={id} data={data} />}
-      {mode === "label" && <LabelBody data={data} />}
-    </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`delete "${data.title}"?`}
+        description={
+          <>
+            This permanently removes the session and all its messages. Forks
+            from it stay on the canvas but no longer share lineage.
+          </>
+        }
+        confirmLabel="delete"
+        destructive
+        onConfirm={handleDelete}
+      />
+    </>
   );
 }
 
