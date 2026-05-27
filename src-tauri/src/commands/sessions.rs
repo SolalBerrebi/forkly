@@ -9,7 +9,7 @@ use uuid::Uuid;
 const SELECT_SESSION_COLUMNS: &str = "
     id, title, provider_id, model_id, transport_id, system_prompt,
     position_x, position_y, parent_session_id, fork_point_message_id,
-    created_at, updated_at
+    merge_source_session_ids, created_at, updated_at
 ";
 
 #[tauri::command]
@@ -122,6 +122,56 @@ pub async fn update_session(
         .execute(pool)
         .await?;
     }
+
+    fetch_session(pool, &id).await
+}
+
+#[tauri::command]
+pub async fn merge_sessions(
+    state: State<'_, AppState>,
+    source_session_ids: Vec<String>,
+    position_x: f64,
+    position_y: f64,
+) -> AppResult<Session> {
+    if source_session_ids.len() < 2 {
+        return Err(AppError::BadRequest(
+            "merge needs at least 2 source sessions".into(),
+        ));
+    }
+
+    let pool = state.db().await?;
+
+    // Inherit provider / model / transport from the first source so the
+    // merge node looks consistent with where it came from. (Future polish:
+    // pick the "strongest" model when sources mix.)
+    let first = fetch_session(pool, &source_session_ids[0]).await?;
+
+    let id = Uuid::new_v4().to_string();
+    let now = now_ms();
+    let sources_json = serde_json::to_string(&source_session_ids)
+        .map_err(|e| AppError::Other(format!("encode merge sources: {e}")))?;
+    let title = "synthesis";
+
+    sqlx::query(
+        "INSERT INTO sessions
+          (id, title, provider_id, model_id, transport_id, system_prompt,
+           position_x, position_y, parent_session_id, fork_point_message_id,
+           merge_source_session_ids, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(title)
+    .bind(&first.provider_id)
+    .bind(&first.model_id)
+    .bind(&first.transport_id)
+    .bind(&first.system_prompt)
+    .bind(position_x)
+    .bind(position_y)
+    .bind(&sources_json)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await?;
 
     fetch_session(pool, &id).await
 }

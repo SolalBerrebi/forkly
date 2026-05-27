@@ -13,6 +13,8 @@ export interface Session {
   positionY: number;
   parentSessionId: string | null;
   forkPointMessageId: string | null;
+  /** JSON-encoded array of source session ids for merge nodes, NULL otherwise. */
+  mergeSourceSessionIds: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -64,6 +66,16 @@ export const ipc = {
     invoke<Session>("create_session", { input }),
   updateSession: (id: string, patch: UpdateSessionInput) =>
     invoke<Session>("update_session", { id, patch }),
+  mergeSessions: (
+    sourceSessionIds: string[],
+    positionX: number,
+    positionY: number,
+  ) =>
+    invoke<Session>("merge_sessions", {
+      sourceSessionIds,
+      positionX,
+      positionY,
+    }),
   deleteSession: (id: string) => invoke<void>("delete_session", { id }),
 
   listMessages: (sessionId: string) =>

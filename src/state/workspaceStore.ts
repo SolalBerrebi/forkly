@@ -14,6 +14,8 @@ export interface Session {
   position: { x: number; y: number };
   parentSessionId: SessionId | null;
   forkPointMessageId: string | null;
+  /** Decoded list of source session ids — empty for non-merge sessions. */
+  mergeSourceSessionIds: SessionId[];
 }
 
 export interface AddSessionInput {
@@ -28,6 +30,15 @@ export interface AddSessionInput {
 }
 
 function fromIpc(s: IpcSession): Session {
+  let mergeSourceSessionIds: SessionId[] = [];
+  if (s.mergeSourceSessionIds) {
+    try {
+      const parsed = JSON.parse(s.mergeSourceSessionIds);
+      if (Array.isArray(parsed)) mergeSourceSessionIds = parsed as SessionId[];
+    } catch {
+      // ignore malformed JSON — treat as non-merge
+    }
+  }
   return {
     id: s.id,
     title: s.title,
@@ -37,6 +48,7 @@ function fromIpc(s: IpcSession): Session {
     position: { x: s.positionX, y: s.positionY },
     parentSessionId: s.parentSessionId,
     forkPointMessageId: s.forkPointMessageId,
+    mergeSourceSessionIds,
   };
 }
 
@@ -63,6 +75,11 @@ interface WorkspaceState {
     anchorMessageId: string,
     count: number,
   ) => Promise<SessionId[]>;
+  /**
+   * Create a merge node that synthesizes the final responses of 2+ sibling
+   * sessions. Returns the new session id and auto-fires the synthesis stream.
+   */
+  mergeSessions: (sourceSessionIds: SessionId[]) => Promise<SessionId>;
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
   /** Local-only title set — used when the backend has already persisted the
@@ -220,6 +237,43 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       }
 
       return created.map((c) => c.id);
+    },
+
+    mergeSessions: async (sourceSessionIds) => {
+      if (sourceSessionIds.length < 2) {
+        throw new Error("merge needs at least 2 source sessions");
+      }
+      const sources = sourceSessionIds
+        .map((id) => get().sessions[id])
+        .filter((s): s is Session => !!s);
+      if (sources.length < 2) {
+        throw new Error("merge: not all source sessions are in store");
+      }
+
+      // Place the merge node to the right of the rightmost source, vertically
+      // centered on the mean of source Ys. Visually this makes the
+      // multi-incoming-edge pattern read like a funnel.
+      const maxX = Math.max(...sources.map((s) => s.position.x));
+      const meanY = sources.reduce((a, s) => a + s.position.y, 0) / sources.length;
+      const position = { x: maxX + 460, y: meanY };
+
+      const created = await ipc.mergeSessions(
+        sourceSessionIds,
+        position.x,
+        position.y,
+      );
+
+      set((state) => {
+        state.sessions[created.id] = fromIpc(created);
+      });
+
+      // Auto-fire synthesis — backend builds the prompt from source outputs
+      // when it sees a merge session's first turn with empty user_message.
+      ipc.startStream(created.id, "").catch((err) => {
+        console.error("merge synthesis stream failed", err);
+      });
+
+      return created.id;
     },
 
     updateSessionPosition: (id, position) => {

@@ -7,7 +7,7 @@ import {
   type Node,
   type NodeChange,
 } from "@xyflow/react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMessagesStore } from "../state/messagesStore";
 import { useWorkspaceStore } from "../state/workspaceStore";
 import { LineageEdge, type LineageEdgeType } from "./edges/LineageEdge";
@@ -20,8 +20,11 @@ const edgeTypes = { lineage: LineageEdge };
 export function ForkCanvas() {
   const sessions = useWorkspaceStore((s) => s.sessions);
   const updatePosition = useWorkspaceStore((s) => s.updateSessionPosition);
+  const mergeSessions = useWorkspaceStore((s) => s.mergeSessions);
   const streamingByMsg = useMessagesStore((s) => s.streaming);
   const msgBySession = useMessagesStore((s) => s.bySession);
+
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
 
   const nodes = useMemo<SessionNodeType[]>(
     () =>
@@ -34,27 +37,36 @@ export function ForkCanvas() {
     [sessions],
   );
 
-  // Derive edges from parent_session_id. The lineage thread becomes
-  // animated when the child has a currently-streaming assistant message —
-  // that's the visual cue that tokens are flowing from the parent context
-  // into the new branch.
-  const edges = useMemo<LineageEdgeType[]>(
-    () =>
-      Object.values(sessions)
-        .filter((s) => s.parentSessionId)
-        .map((s) => {
-          const ids = msgBySession[s.id] ?? [];
-          const streaming = ids.some((mid) => !!streamingByMsg[mid]);
-          return {
-            id: `lineage-${s.parentSessionId}-${s.id}`,
-            source: s.parentSessionId!,
-            target: s.id,
-            type: "lineage",
-            data: { streaming },
-          };
-        }),
-    [sessions, msgBySession, streamingByMsg],
-  );
+  // Derive edges from both linear forks (parent_session_id) AND merge
+  // sources (merge_source_session_ids). A merge node ends up with N
+  // incoming edges, which xyflow renders as the visual funnel.
+  const edges = useMemo<LineageEdgeType[]>(() => {
+    const out: LineageEdgeType[] = [];
+    for (const s of Object.values(sessions)) {
+      const childIds = msgBySession[s.id] ?? [];
+      const childIsStreaming = childIds.some((mid) => !!streamingByMsg[mid]);
+
+      if (s.parentSessionId) {
+        out.push({
+          id: `lineage-${s.parentSessionId}-${s.id}`,
+          source: s.parentSessionId,
+          target: s.id,
+          type: "lineage",
+          data: { streaming: childIsStreaming },
+        });
+      }
+      for (const srcId of s.mergeSourceSessionIds) {
+        out.push({
+          id: `merge-${srcId}-${s.id}`,
+          source: srcId,
+          target: s.id,
+          type: "lineage",
+          data: { streaming: childIsStreaming },
+        });
+      }
+    }
+    return out;
+  }, [sessions, msgBySession, streamingByMsg]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<SessionNodeType>[]) => {
@@ -70,6 +82,31 @@ export function ForkCanvas() {
     [nodes, sessions, updatePosition],
   );
 
+  // M shortcut: when 2+ session nodes are selected, press M to spawn a
+  // merge node that synthesizes their final responses.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "m") return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const tgt = e.target as HTMLElement | null;
+      if (
+        tgt &&
+        (tgt.tagName === "INPUT" ||
+          tgt.tagName === "TEXTAREA" ||
+          tgt.isContentEditable)
+      ) {
+        return;
+      }
+      if (selectedNodeIds.length < 2) return;
+      e.preventDefault();
+      mergeSessions(selectedNodeIds).catch((err) => {
+        console.error("merge failed", err);
+      });
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedNodeIds, mergeSessions]);
+
   const isEmpty = nodes.length === 0;
 
   return (
@@ -79,6 +116,9 @@ export function ForkCanvas() {
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
+      onSelectionChange={({ nodes: selectedNodes }) =>
+        setSelectedNodeIds(selectedNodes.map((n) => n.id))
+      }
       proOptions={{ hideAttribution: true }}
       minZoom={0.1}
       maxZoom={2.5}
@@ -98,6 +138,17 @@ export function ForkCanvas() {
               + new session
             </kbd>{" "}
             to start
+          </div>
+        </Panel>
+      )}
+      {selectedNodeIds.length >= 2 && (
+        <Panel position="top-center" className="top-3!">
+          <div className="select-none rounded-full border border-accent-from/40 bg-bg-elevated/80 px-3 py-1.5 font-mono text-[11px] text-fg backdrop-blur">
+            {selectedNodeIds.length} selected · press{" "}
+            <kbd className="mx-0.5 rounded border border-accent-from/40 bg-bg px-1.5 py-px text-[10px] text-accent-from">
+              M
+            </kbd>{" "}
+            to merge
           </div>
         </Panel>
       )}

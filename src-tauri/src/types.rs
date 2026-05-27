@@ -13,6 +13,9 @@ pub struct Session {
     pub position_y: f64,
     pub parent_session_id: Option<String>,
     pub fork_point_message_id: Option<String>,
+    /// JSON-encoded array of session ids whose outputs this session
+    /// synthesizes. NULL for regular (non-merge) sessions.
+    pub merge_source_session_ids: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }

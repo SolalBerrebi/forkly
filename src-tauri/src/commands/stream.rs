@@ -9,6 +9,7 @@ use crate::providers::{
 use crate::types::{Message, Session};
 use crate::AppState;
 use serde::Serialize;
+use sqlx::SqlitePool;
 use std::fmt::Write as _;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
@@ -67,7 +68,7 @@ pub async fn start_stream(
     let session = sqlx::query_as::<_, Session>(
         "SELECT id, title, provider_id, model_id, transport_id, system_prompt,
                 position_x, position_y, parent_session_id, fork_point_message_id,
-                created_at, updated_at
+                merge_source_session_ids, created_at, updated_at
          FROM sessions WHERE id = ?",
     )
     .bind(&session_id)
@@ -98,7 +99,20 @@ pub async fn start_stream(
         None
     };
 
-    // 4. Persist user message.
+    // 4. If this is the first turn of a merge node, REPLACE the incoming
+    //    user_message with a synthesis prompt built from the source nodes'
+    //    final assistant responses. Frontend can call start_stream(merge_id, "")
+    //    right after merge_sessions; the synthesis content lives entirely
+    //    on the backend so prompt-engineering doesn't leak into the UI.
+    let is_merge_first_turn = session.merge_source_session_ids.is_some()
+        && prior_message_count == 0;
+    let user_message = if is_merge_first_turn {
+        build_synthesis_prompt(&pool, &session).await?
+    } else {
+        user_message
+    };
+
+    // 5. Persist user message.
     let user_msg =
         insert_message(&pool, &session.id, "user", &user_message, None, None).await?;
 
@@ -264,6 +278,58 @@ pub async fn start_stream(
 #[tauri::command]
 pub async fn detect_claude_code() -> crate::providers::claude_code::DetectionStatus {
     crate::providers::claude_code::detect().await
+}
+
+/// Build the synthesis prompt for a merge node's first turn — collects
+/// each source session's final assistant response and asks the model to
+/// distill them into a single best-of answer.
+async fn build_synthesis_prompt(
+    pool: &SqlitePool,
+    session: &Session,
+) -> AppResult<String> {
+    let sources_json = session
+        .merge_source_session_ids
+        .as_ref()
+        .ok_or_else(|| AppError::Other("merge session missing source ids".into()))?;
+    let source_ids: Vec<String> = serde_json::from_str(sources_json)
+        .map_err(|e| AppError::Other(format!("decode merge sources: {e}")))?;
+
+    let mut variants = String::new();
+    let mut found = 0usize;
+    for (i, src_id) in source_ids.iter().enumerate() {
+        let last = sqlx::query_as::<_, Message>(
+            "SELECT id, session_id, role, content, provider_id, model_id,
+                    input_tokens, output_tokens, position, created_at
+             FROM messages
+             WHERE session_id = ? AND role = 'assistant'
+             ORDER BY position DESC LIMIT 1",
+        )
+        .bind(src_id)
+        .fetch_optional(pool)
+        .await?;
+
+        if let Some(msg) = last {
+            if !msg.content.trim().is_empty() {
+                let _ = writeln!(variants, "VARIANT {}:\n{}\n", i + 1, msg.content);
+                found += 1;
+            }
+        }
+    }
+
+    if found < 2 {
+        return Err(AppError::BadRequest(format!(
+            "merge needs at least 2 source responses, found {found}"
+        )));
+    }
+
+    Ok(format!(
+        "You have {} parallel responses below from different branches that diverged \
+         from the same point in a conversation. Synthesize them into a single \
+         best-of response: capture the strongest insights from each, note \
+         meaningful differences explicitly, and present a clear conclusion. Don't \
+         restate the variants verbatim — distill them.\n\n{}",
+        found, variants
+    ))
 }
 
 /// Render the inherited history as a prelude that gets prepended to the
