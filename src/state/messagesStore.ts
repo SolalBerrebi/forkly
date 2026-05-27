@@ -9,6 +9,12 @@ interface MessagesState {
   bySession: Record<string, string[]>;
   /** Messages currently being streamed (their assistant message id). */
   streaming: Record<string, true>;
+  /** Sessions that currently have ANY streaming message. Maintained separately
+   *  from `streaming` so canvas consumers (ForkCanvas edges) can subscribe to
+   *  start/stop transitions only, not to every token delta — otherwise edges
+   *  recompute hundreds of times per second during streaming and React hits
+   *  its infinite-render guard. */
+  streamingSessions: Record<string, true>;
   /** Per-message error strings, if any. */
   errors: Record<string, string>;
   /** Sessions whose messages we've already fetched. Plain Record (not Set)
@@ -29,6 +35,7 @@ export const useMessagesStore = create<MessagesState>()(
     byId: {},
     bySession: {},
     streaming: {},
+    streamingSessions: {},
     errors: {},
     hydratedSessions: {},
 
@@ -52,6 +59,7 @@ export const useMessagesStore = create<MessagesState>()(
         state.bySession[message.sessionId] = list;
         if (message.role === "assistant" && message.content === "") {
           state.streaming[message.id] = true;
+          state.streamingSessions[message.sessionId] = true;
         }
         delete state.errors[message.id];
       });
@@ -69,6 +77,19 @@ export const useMessagesStore = create<MessagesState>()(
         const msg = state.byId[assistantMessageId];
         if (msg) msg.content = content;
         delete state.streaming[assistantMessageId];
+        if (msg) {
+          // Only drop the session-level streaming flag if no OTHER message in
+          // the same session is still streaming (would matter for tool-call
+          // workflows later; harmless today).
+          const sessionId = msg.sessionId;
+          const sessionMsgIds = state.bySession[sessionId] ?? [];
+          const anyStillStreaming = sessionMsgIds.some(
+            (id) => id !== assistantMessageId && !!state.streaming[id],
+          );
+          if (!anyStillStreaming) {
+            delete state.streamingSessions[sessionId];
+          }
+        }
       });
     },
 
@@ -77,11 +98,8 @@ export const useMessagesStore = create<MessagesState>()(
         if (assistantMessageId) {
           delete state.streaming[assistantMessageId];
           state.errors[assistantMessageId] = error;
-        } else {
-          // No specific assistant message to attach to — surface under the session somehow.
-          // For now, just log; UI can later show session-level errors.
-          console.error(`stream error for session ${sessionId}: ${error}`);
         }
+        delete state.streamingSessions[sessionId];
       });
     },
   })),

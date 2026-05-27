@@ -13,13 +13,24 @@ function App() {
   }, [hydrate]);
 
   useEffect(() => {
+    // Race-safe subscription pattern. Under React StrictMode + Vite HMR, the
+    // cleanup can fire BEFORE subscribeStreamEvents() resolves. Without the
+    // `cancelled` flag, the listeners would leak — and once enough HMR
+    // cycles stack, you get duplicate event handling, runaway store
+    // mutations, and the multi-GB memory blowup we just hit.
+    let cancelled = false;
     let unlisten: (() => void) | null = null;
     subscribeStreamEvents()
       .then((u) => {
-        unlisten = u;
+        if (cancelled) {
+          u();
+        } else {
+          unlisten = u;
+        }
       })
       .catch((err) => console.error("stream subscription failed", err));
     return () => {
+      cancelled = true;
       if (unlisten) unlisten();
     };
   }, []);

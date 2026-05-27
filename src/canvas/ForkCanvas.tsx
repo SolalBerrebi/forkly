@@ -6,6 +6,7 @@ import {
   applyNodeChanges,
   type Node,
   type NodeChange,
+  type OnSelectionChangeParams,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMessagesStore } from "../state/messagesStore";
@@ -17,12 +18,27 @@ import { CrossGrid } from "./background/CrossGrid";
 const nodeTypes = { session: SessionNode };
 const edgeTypes = { lineage: LineageEdge };
 
+// Hoist all of ReactFlow's stable-by-design props to module level. Passing
+// new object / array / function references on every render makes ReactFlow's
+// internal effects re-run and can cascade into 'Maximum update depth exceeded'.
+const PRO_OPTIONS = { hideAttribution: true } as const;
+const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 1 } as const;
+const PAN_ON_DRAG: number[] = [1, 2];
+
+function sameIds(a: readonly string[], b: readonly string[]) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 export function ForkCanvas() {
   const sessions = useWorkspaceStore((s) => s.sessions);
   const updatePosition = useWorkspaceStore((s) => s.updateSessionPosition);
   const mergeSessions = useWorkspaceStore((s) => s.mergeSessions);
-  const streamingByMsg = useMessagesStore((s) => s.streaming);
-  const msgBySession = useMessagesStore((s) => s.bySession);
+  // Subscribe ONLY to start/stop transitions, not to every token delta —
+  // edges depend on this, so observing per-delta state caused the infinite
+  // render storm + 12GB memory blowout.
+  const streamingSessions = useMessagesStore((s) => s.streamingSessions);
 
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
 
@@ -37,15 +53,10 @@ export function ForkCanvas() {
     [sessions],
   );
 
-  // Derive edges from both linear forks (parent_session_id) AND merge
-  // sources (merge_source_session_ids). A merge node ends up with N
-  // incoming edges, which xyflow renders as the visual funnel.
   const edges = useMemo<LineageEdgeType[]>(() => {
     const out: LineageEdgeType[] = [];
     for (const s of Object.values(sessions)) {
-      const childIds = msgBySession[s.id] ?? [];
-      const childIsStreaming = childIds.some((mid) => !!streamingByMsg[mid]);
-
+      const childIsStreaming = !!streamingSessions[s.id];
       if (s.parentSessionId) {
         out.push({
           id: `lineage-${s.parentSessionId}-${s.id}`,
@@ -66,7 +77,7 @@ export function ForkCanvas() {
       }
     }
     return out;
-  }, [sessions, msgBySession, streamingByMsg]);
+  }, [sessions, streamingSessions]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<SessionNodeType>[]) => {
@@ -80,6 +91,18 @@ export function ForkCanvas() {
       }
     },
     [nodes, sessions, updatePosition],
+  );
+
+  // ReactFlow fires onSelectionChange whenever its internal selection store
+  // ticks — including spurious fires during render. We guard with an
+  // identity check so unchanged selections never enqueue a setState and
+  // we never trigger React's infinite-loop detector.
+  const onSelectionChange = useCallback(
+    ({ nodes: selectedNodes }: OnSelectionChangeParams) => {
+      const newIds = selectedNodes.map((n) => n.id);
+      setSelectedNodeIds((prev) => (sameIds(prev, newIds) ? prev : newIds));
+    },
+    [],
   );
 
   // M shortcut: when 2+ session nodes are selected, press M to spawn a
@@ -116,18 +139,16 @@ export function ForkCanvas() {
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
-      onSelectionChange={({ nodes: selectedNodes }) =>
-        setSelectedNodeIds(selectedNodes.map((n) => n.id))
-      }
-      proOptions={{ hideAttribution: true }}
+      onSelectionChange={onSelectionChange}
+      proOptions={PRO_OPTIONS}
       minZoom={0.1}
       maxZoom={2.5}
-      defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+      defaultViewport={DEFAULT_VIEWPORT}
       panOnScroll
       zoomOnPinch
       zoomOnDoubleClick={false}
       selectionOnDrag
-      panOnDrag={[1, 2]}
+      panOnDrag={PAN_ON_DRAG}
     >
       <CrossGrid />
       {isEmpty && (
