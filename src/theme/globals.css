@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0a0b;
+  --color-bg-elevated: #101013;
+  --color-border: #22222a;
+  --color-border-strong: #2e2e38;
+  --color-fg: #f5f5f7;
+  --color-fg-muted: #8a8a93;
+  --color-fg-subtle: #555560;
+  --color-accent-from: #7c5cff;
+  --color-accent-to: #5b8def;
+  --color-danger: #f59e0b;
+  --color-success: #22c55e;
+
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", "Menlo", monospace;
+
+  --radius-card: 12px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Light mode opt-in via [data-theme="light"] on <html>. */
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #fafaf7;
+  --color-bg-elevated: #ffffff;
+  --color-border: #e7e7e3;
+  --color-border-strong: #d4d4cf;
+  --color-fg: #18181b;
+  --color-fg-muted: #6b6b73;
+  --color-fg-subtle: #a1a1a8;
+}
+
+/* Subtle cross-grid background — placeholder until xyflow custom bg in M1. */
+.cross-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-fg) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-fg) 4%, transparent) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
