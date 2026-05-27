@@ -121,6 +121,7 @@ interface WorkspaceState {
   mergeSessions: (sourceSessionIds: SessionId[]) => Promise<SessionId>;
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
+  updateSessionModel: (id: SessionId, modelId: string) => Promise<void>;
   applyTitleFromBackend: (id: SessionId, title: string) => void;
   /** Apply per-session stats coming from the backend's session:stats event.
    *  Updates input/output token totals + lastActivityAt without a re-list. */
@@ -417,6 +418,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (s) s.title = title;
       });
       await ipc.updateSession(id, { title });
+    },
+
+    updateSessionModel: async (id, modelId) => {
+      set((state) => {
+        const s = state.sessions[id];
+        if (s) s.modelId = modelId;
+      });
+      await ipc.updateSession(id, { modelId });
     },
 
     applyTitleFromBackend: (id, title) => {

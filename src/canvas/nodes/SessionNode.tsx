@@ -8,12 +8,13 @@ import {
   type ReactFlowState,
 } from "@xyflow/react";
 import { motion } from "framer-motion";
-import { GitBranch, GitFork, MoreHorizontal, Trash2 } from "lucide-react";
+import { Check, ChevronDown, GitBranch, GitFork, MoreHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ChatView } from "../../chat/ChatView";
 import { ConfirmDialog } from "../../chrome/ConfirmDialog";
 import { formatCompactCount, formatRelativeTime } from "../../lib/format";
 import { ipc } from "../../lib/ipc";
+import { MODEL_CATALOG, labelForModel } from "../../providers/models";
 import { useMessagesStore } from "../../state/messagesStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 
@@ -89,9 +90,11 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
             <GitFork className="h-3.5 w-3.5" />
           </div>
           <div className="flex-1 truncate font-mono text-xs text-fg">{data.title}</div>
-          <div className="rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted">
-            {data.providerId}
-          </div>
+          <ModelPicker
+            sessionId={id}
+            providerId={data.providerId}
+            modelId={data.modelId}
+          />
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button
@@ -144,6 +147,78 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
         onConfirm={handleDelete}
       />
     </>
+  );
+}
+
+function ModelPicker({
+  sessionId,
+  providerId,
+  modelId,
+}: {
+  sessionId: string;
+  providerId: string;
+  modelId: string;
+}) {
+  const updateSessionModel = useWorkspaceStore((s) => s.updateSessionModel);
+  const options = MODEL_CATALOG[providerId] ?? [];
+  const currentLabel = labelForModel(providerId, modelId);
+
+  // If we don't know any models for this provider, render a static read-only
+  // chip — matches the old behavior for unknown providers (no dropdown).
+  if (options.length === 0) {
+    return (
+      <div className="rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted">
+        {providerId}
+      </div>
+    );
+  }
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          aria-label="Switch model"
+          className="flex items-center gap-1 rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted transition-colors hover:bg-bg-elevated hover:text-fg"
+        >
+          {currentLabel}
+          <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={4}
+          className="z-50 min-w-44 overflow-hidden rounded-md border border-border bg-bg-elevated p-1 shadow-xl"
+        >
+          <div className="px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-fg-subtle">
+            model
+          </div>
+          {options.map((opt) => {
+            const active = opt.id === modelId;
+            return (
+              <DropdownMenu.Item
+                key={opt.id}
+                onSelect={() => {
+                  if (active) return;
+                  updateSessionModel(sessionId, opt.id).catch((err) =>
+                    console.error("update model failed", err),
+                  );
+                }}
+                className="flex items-center gap-2 rounded px-2 py-1.5 font-mono text-[11px] text-fg-muted outline-none data-highlighted:bg-bg data-highlighted:text-fg"
+              >
+                <Check
+                  className={`h-3 w-3 shrink-0 ${active ? "text-accent-from" : "opacity-0"}`}
+                />
+                <span className="flex-1">{opt.label}</span>
+                {opt.description && (
+                  <span className="text-[9px] text-fg-subtle">{opt.description}</span>
+                )}
+              </DropdownMenu.Item>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
