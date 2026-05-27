@@ -49,6 +49,9 @@ html[data-theme="light"] {
 
 :root {
   --fork-grid-color: color-mix(in srgb, var(--color-fg) 10%, transparent);
+  /* User-adjustable chat body size (S / M / L / XL via Settings → appearance).
+     Default M. Read at app start from localStorage. */
+  --chat-text-size: 14px;
 }
 
 html[data-theme="light"] {
@@ -139,9 +142,27 @@ html[data-theme="light"] {
 /* Assistant message body. The wrapping component sets `font-mono` so
    everything inherits the mono family — gives a Claude-Code-terminal feel
    while letting react-markdown still produce semantic <p>/<ul>/<pre>. */
+.chat-md {
+  font-size: var(--chat-text-size);
+}
 .chat-md > * { margin: 0; }
 .chat-md > * + * { margin-top: 0.4rem; }
-.chat-md p { line-height: 1.5; }
+.chat-md p { line-height: 1.55; }
+
+/* Text selection inside chat surfaces. xyflow's .react-flow__node sets
+   user-select: none, so without this override the user can't drag-select to
+   copy a message. Scoped to .chat-selectable to keep node chrome (header,
+   chips, buttons) un-selectable as expected. */
+.react-flow__node .chat-selectable,
+.react-flow__node .chat-selectable * {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.react-flow__node .chat-selectable code,
+.react-flow__node .chat-selectable pre {
+  cursor: text;
+}
 .chat-md code {
   font-family: var(--font-mono);
   background: var(--color-bg);

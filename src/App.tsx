@@ -3,11 +3,18 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect } from "react";
 import { ForkCanvas } from "./canvas/ForkCanvas";
 import { TopBar } from "./chrome/TopBar";
+import { applyChatTextSize, getInitialChatTextSize } from "./lib/chatTextSize";
 import { subscribeStreamEvents } from "./lib/streamBridge";
 import { useWorkspaceStore } from "./state/workspaceStore";
 
 function App() {
   const hydrate = useWorkspaceStore((s) => s.hydrate);
+
+  // Apply the saved chat text size before first paint so messages render at
+  // the user's preferred size on cold launch (no visible jump).
+  useEffect(() => {
+    applyChatTextSize(getInitialChatTextSize());
+  }, []);
 
   useEffect(() => {
     hydrate();

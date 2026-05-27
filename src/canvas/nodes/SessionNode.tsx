@@ -19,7 +19,7 @@ import {
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { ChatView } from "../../chat/ChatView";
 import { ConfirmDialog } from "../../chrome/ConfirmDialog";
 import { formatCompactCount, formatRelativeTime } from "../../lib/format";
@@ -57,10 +57,12 @@ const DEFAULT_WIDTH = 360;
 const DEFAULT_HEIGHT = 460;
 const MIN_WIDTH = 280;
 const MIN_HEIGHT = 240;
-const MAX_WIDTH = 720;
-const MAX_HEIGHT = 900;
+// "Effectively unlimited" — large enough that no monitor will hit the cap,
+// while still keeping a sanity bound so a stray drag can't break the canvas.
+const MAX_WIDTH = 4000;
+const MAX_HEIGHT = 4000;
 
-export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) {
+function SessionNodeImpl({ id, data, selected }: NodeProps<SessionNodeType>) {
   const zoom = useStore(zoomSelector);
   const removeSession = useWorkspaceStore((s) => s.removeSession);
   const updateSessionSize = useWorkspaceStore((s) => s.updateSessionSize);
@@ -227,6 +229,24 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
     </>
   );
 }
+
+/**
+ * Custom equality: SessionNode re-renders only when something that actually
+ * affects its rendered output changes. Pan and zoom of the canvas re-pass
+ * the SAME data + selected to every node — without memo, every node would
+ * re-evaluate on every viewport tick and trackpad pan would feel stuttery.
+ * Internal subscriptions (workspaceStore, messagesStore) still trigger
+ * re-renders when their slices change; this just skips the no-op churn.
+ */
+export const SessionNode = memo(SessionNodeImpl, (prev, next) => {
+  return (
+    prev.id === next.id &&
+    prev.selected === next.selected &&
+    prev.data.title === next.data.title &&
+    prev.data.providerId === next.data.providerId &&
+    prev.data.modelId === next.data.modelId
+  );
+});
 
 function ModelPicker({
   sessionId,

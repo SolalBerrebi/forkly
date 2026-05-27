@@ -87,7 +87,10 @@ function MessageImpl({ message, isStreaming, error }: MessageProps) {
         )}
       </div>
 
-      <div className="chat-md font-mono text-[12px] leading-relaxed text-fg">
+      <div
+        className="chat-md chat-selectable font-mono leading-relaxed text-fg"
+        style={{ fontSize: "var(--chat-text-size)" }}
+      >
         {isUser ? (
           <p className="whitespace-pre-wrap wrap-break-word">
             <span className="select-none text-fg-subtle">{"› "}</span>

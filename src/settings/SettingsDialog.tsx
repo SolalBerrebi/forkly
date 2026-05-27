@@ -10,9 +10,16 @@ import {
   RefreshCw,
   Sparkles,
   Terminal,
+  Type,
   X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import {
+  applyChatTextSize,
+  CHAT_TEXT_SIZE_OPTIONS,
+  getInitialChatTextSize,
+  type ChatTextSize,
+} from "../lib/chatTextSize";
 import { ipc, type ClaudeCodeStatus } from "../lib/ipc";
 
 interface ProviderConfig {
@@ -49,7 +56,7 @@ export function SettingsDialog({ trigger }: { trigger: ReactNode }) {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-40 w-[500px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-2xl focus:outline-none"
+          className="fixed left-1/2 top-1/2 z-40 w-125 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-2xl focus:outline-none"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <div className="flex items-start justify-between border-b border-border px-5 py-4">
@@ -68,6 +75,7 @@ export function SettingsDialog({ trigger }: { trigger: ReactNode }) {
           </div>
 
           <ClaudeCodeSection />
+          <AppearanceSection />
           <ApiKeysSection />
         </Dialog.Content>
       </Dialog.Portal>
@@ -222,6 +230,58 @@ function StatusPill({
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] ${colors}`}
     >
       {children}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------- */
+/* Appearance                                                           */
+/* -------------------------------------------------------------------- */
+
+function AppearanceSection() {
+  const [size, setSize] = useState<ChatTextSize>(() => getInitialChatTextSize());
+
+  const handlePick = (next: ChatTextSize) => {
+    setSize(next);
+    applyChatTextSize(next);
+  };
+
+  return (
+    <div className="border-b border-border px-5 py-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-bg text-fg-muted">
+            <Type className="h-3.5 w-3.5" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="font-mono text-sm text-fg">chat text size</div>
+            <div className="text-[10px] text-fg-muted">
+              Scales message body + composer. Headers and chips stay fixed.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 rounded-md border border-border bg-bg p-0.5">
+          {CHAT_TEXT_SIZE_OPTIONS.map((opt) => {
+            const active = opt.id === size;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => handlePick(opt.id)}
+                aria-pressed={active}
+                title={`${opt.px}px`}
+                className={`flex h-6 w-7 items-center justify-center rounded font-mono text-[10px] transition-colors ${
+                  active
+                    ? "bg-accent-from/15 text-accent-from"
+                    : "text-fg-muted hover:bg-bg-elevated hover:text-fg"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

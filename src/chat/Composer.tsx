@@ -51,7 +51,8 @@ export function Composer({ sessionId }: ComposerProps) {
       <div className="group/composer flex items-start gap-2 rounded-md border border-border bg-bg px-2 py-1.5 transition-colors focus-within:border-accent-from/60">
         <span
           aria-hidden
-          className="mt-px select-none font-mono text-[12px] leading-relaxed text-fg-subtle group-focus-within/composer:text-accent-from"
+          className="mt-px select-none font-mono leading-relaxed text-fg-subtle group-focus-within/composer:text-accent-from"
+          style={{ fontSize: "var(--chat-text-size)" }}
         >
           ›
         </span>
@@ -70,7 +71,8 @@ export function Composer({ sessionId }: ComposerProps) {
           rows={1}
           placeholder={isStreaming ? "streaming…" : "type a message…"}
           disabled={disabled}
-          className="flex-1 resize-none bg-transparent font-mono text-[12px] leading-relaxed text-fg outline-none placeholder:text-fg-subtle disabled:opacity-50"
+          style={{ fontSize: "var(--chat-text-size)" }}
+          className="flex-1 resize-none bg-transparent font-mono leading-relaxed text-fg outline-none placeholder:text-fg-subtle disabled:opacity-50"
         />
         <button
           onClick={send}

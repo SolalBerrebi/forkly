@@ -169,8 +169,11 @@ export function ForkCanvas() {
       maxZoom={2.5}
       defaultViewport={DEFAULT_VIEWPORT}
       panOnScroll
+      panOnScrollSpeed={0.7}
       zoomOnPinch
+      zoomOnScroll={false}
       zoomOnDoubleClick={false}
+      preventScrolling
       selectionOnDrag
       panOnDrag={PAN_ON_DRAG}
       // We handle delete ourselves to show a confirm dialog before destroying state.
