@@ -8,10 +8,12 @@ import {
   type ReactFlowState,
 } from "@xyflow/react";
 import { motion } from "framer-motion";
-import { GitFork, MoreHorizontal, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { GitBranch, GitFork, MoreHorizontal, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ChatView } from "../../chat/ChatView";
 import { ConfirmDialog } from "../../chrome/ConfirmDialog";
+import { formatCompactCount, formatRelativeTime } from "../../lib/format";
+import { ipc } from "../../lib/ipc";
 import { useMessagesStore } from "../../state/messagesStore";
 import { useWorkspaceStore } from "../../state/workspaceStore";
 
@@ -117,6 +119,11 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
           </DropdownMenu.Root>
         </div>
 
+        {/* Info chips strip — only renders in full mode to avoid cluttering
+            compact / label views. Reads stats from the workspaceStore so it
+            updates after every stream:done via the session:stats event. */}
+        {mode === "full" && <SessionInfoChips sessionId={id} />}
+
         {mode === "full" && <ChatView sessionId={id} />}
         {mode === "compact" && <CompactBody sessionId={id} data={data} />}
         {mode === "label" && <LabelBody data={data} />}
@@ -138,6 +145,75 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
       />
     </>
   );
+}
+
+function SessionInfoChips({ sessionId }: { sessionId: string }) {
+  // Each selector returns a primitive (or a value that only changes on
+  // stream:done) so this strip never re-renders during streaming.
+  const inputTokens = useWorkspaceStore((s) => s.sessions[sessionId]?.inputTokensTotal ?? 0);
+  const outputTokens = useWorkspaceStore((s) => s.sessions[sessionId]?.outputTokensTotal ?? 0);
+  const lastActivityAt = useWorkspaceStore((s) => s.sessions[sessionId]?.lastActivityAt ?? null);
+  const workingDir = useWorkspaceStore((s) => s.sessions[sessionId]?.workingDir ?? null);
+  const turnCount = useMessagesStore((s) => (s.bySession[sessionId]?.length ?? 0));
+
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
+  useEffect(() => {
+    if (!workingDir) {
+      setGitBranch(null);
+      return;
+    }
+    let cancelled = false;
+    ipc
+      .gitBranchFor(workingDir)
+      .then((b) => {
+        if (!cancelled) setGitBranch(b);
+      })
+      .catch(() => {
+        if (!cancelled) setGitBranch(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workingDir]);
+
+  const hasTokens = inputTokens > 0 || outputTokens > 0;
+  const hasAnyChip = hasTokens || turnCount > 0 || lastActivityAt || gitBranch;
+  if (!hasAnyChip) return null;
+
+  return (
+    <div className="flex shrink-0 items-center gap-3 overflow-hidden border-b border-border px-3 py-1 font-mono text-[9px] text-fg-subtle">
+      {hasTokens && (
+        <span className="flex items-center gap-1 whitespace-nowrap">
+          <ChipLabel>tokens</ChipLabel>
+          <span className="text-fg-muted">{formatCompactCount(inputTokens)}</span>
+          <span className="text-fg-subtle/60">›</span>
+          <span className="text-fg-muted">{formatCompactCount(outputTokens)}</span>
+        </span>
+      )}
+      {turnCount > 0 && (
+        <span className="flex items-center gap-1 whitespace-nowrap">
+          <ChipLabel>turns</ChipLabel>
+          <span className="text-fg-muted">{turnCount}</span>
+        </span>
+      )}
+      {lastActivityAt && (
+        <span className="flex items-center gap-1 whitespace-nowrap">
+          <ChipLabel>last</ChipLabel>
+          <span className="text-fg-muted">{formatRelativeTime(lastActivityAt)}</span>
+        </span>
+      )}
+      {gitBranch && (
+        <span className="flex items-center gap-1 whitespace-nowrap">
+          <GitBranch className="h-2.5 w-2.5 text-fg-subtle/70" />
+          <span className="truncate text-fg-muted">{gitBranch}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ChipLabel({ children }: { children: React.ReactNode }) {
+  return <span className="text-fg-subtle/60">{children}</span>;
 }
 
 function CompactBody({ sessionId, data }: { sessionId: string; data: SessionNodeData }) {

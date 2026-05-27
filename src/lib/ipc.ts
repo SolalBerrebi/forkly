@@ -24,6 +24,10 @@ export interface Session {
   /** JSON-encoded array of source session ids for merge nodes, NULL otherwise. */
   mergeSourceSessionIds: string | null;
   workspaceId: string | null;
+  inputTokensTotal: number;
+  outputTokensTotal: number;
+  lastActivityAt: number | null;
+  workingDir: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -115,7 +119,17 @@ export const ipc = {
 
   autoTitle: (sessionId: string) =>
     invoke<string>("auto_title", { sessionId }),
+
+  gitBranchFor: (cwd: string) =>
+    invoke<string | null>("git_branch_for", { cwd }),
 };
+
+export interface SessionStatsPayload {
+  sessionId: string;
+  inputTokensTotal: number;
+  outputTokensTotal: number;
+  lastActivityAt: number;
+}
 
 // Tauri events emitted from start_stream.
 export interface StreamStartPayload {

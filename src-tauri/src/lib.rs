@@ -133,6 +133,7 @@ pub fn run() {
             commands::workspaces::create_workspace,
             commands::workspaces::rename_workspace,
             commands::workspaces::delete_workspace,
+            commands::git::git_branch_for,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

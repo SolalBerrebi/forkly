@@ -1,5 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  SessionStatsPayload,
   StreamDeltaPayload,
   StreamDonePayload,
   StreamErrorPayload,
@@ -51,6 +52,17 @@ export async function subscribeStreamEvents(): Promise<UnlistenFn> {
         e.payload.assistantMessageId,
         e.payload.sessionId,
         e.payload.error,
+      );
+    }),
+  );
+
+  unsubs.push(
+    await listen<SessionStatsPayload>("session:stats", (e) => {
+      useWorkspaceStore.getState().applySessionStats(
+        e.payload.sessionId,
+        e.payload.inputTokensTotal,
+        e.payload.outputTokensTotal,
+        e.payload.lastActivityAt,
       );
     }),
   );

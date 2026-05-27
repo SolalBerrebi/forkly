@@ -48,6 +48,17 @@ pub struct StreamErrorPayload {
     pub error: String,
 }
 
+/// Emitted alongside stream:done so the canvas can update per-session
+/// info chips (token totals, last activity) without re-listing sessions.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionStatsPayload {
+    pub session_id: String,
+    pub input_tokens_total: i64,
+    pub output_tokens_total: i64,
+    pub last_activity_at: i64,
+}
+
 /// What transport is in play for this turn — decided up front, after we know
 /// the session row but before we touch the DB or the network.
 enum Dispatch {
@@ -68,7 +79,9 @@ pub async fn start_stream(
     let session = sqlx::query_as::<_, Session>(
         "SELECT id, title, provider_id, model_id, transport_id, system_prompt,
                 position_x, position_y, parent_session_id, fork_point_message_id,
-                merge_source_session_ids, workspace_id, created_at, updated_at
+                merge_source_session_ids, workspace_id,
+                input_tokens_total, output_tokens_total, last_activity_at, working_dir,
+                created_at, updated_at
          FROM sessions WHERE id = ?",
     )
     .bind(&session_id)
@@ -248,6 +261,43 @@ pub async fn start_stream(
 
         match provider_result {
             Ok(()) => {
+                // Accumulate per-session stats (token totals + last_activity_at)
+                // and emit a session:stats event so the canvas info chips
+                // update without re-listing.
+                let now = crate::db::now_ms();
+                let delta_in = input_tokens.unwrap_or(0);
+                let delta_out = output_tokens.unwrap_or(0);
+                let stats_result = sqlx::query_as::<_, (i64, i64)>(
+                    "UPDATE sessions
+                     SET input_tokens_total = input_tokens_total + ?,
+                         output_tokens_total = output_tokens_total + ?,
+                         last_activity_at = ?,
+                         updated_at = ?
+                     WHERE id = ?
+                     RETURNING input_tokens_total, output_tokens_total",
+                )
+                .bind(delta_in)
+                .bind(delta_out)
+                .bind(now)
+                .bind(now)
+                .bind(&session_id_for_task)
+                .fetch_one(&pool)
+                .await;
+
+                if let Ok((in_total, out_total)) = stats_result {
+                    app_for_task
+                        .emit(
+                            "session:stats",
+                            SessionStatsPayload {
+                                session_id: session_id_for_task.clone(),
+                                input_tokens_total: in_total,
+                                output_tokens_total: out_total,
+                                last_activity_at: now,
+                            },
+                        )
+                        .ok();
+                }
+
                 app_for_task
                     .emit(
                         "stream:done",

@@ -34,6 +34,10 @@ export interface Session {
   /** Decoded list of source session ids — empty for non-merge sessions. */
   mergeSourceSessionIds: SessionId[];
   workspaceId: WorkspaceId;
+  inputTokensTotal: number;
+  outputTokensTotal: number;
+  lastActivityAt: number | null;
+  workingDir: string | null;
 }
 
 export interface AddSessionInput {
@@ -69,6 +73,10 @@ function fromIpc(s: IpcSession): Session {
     forkPointMessageId: s.forkPointMessageId,
     mergeSourceSessionIds,
     workspaceId: s.workspaceId ?? DEFAULT_WORKSPACE_ID,
+    inputTokensTotal: s.inputTokensTotal,
+    outputTokensTotal: s.outputTokensTotal,
+    lastActivityAt: s.lastActivityAt,
+    workingDir: s.workingDir,
   };
 }
 
@@ -114,6 +122,14 @@ interface WorkspaceState {
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
   applyTitleFromBackend: (id: SessionId, title: string) => void;
+  /** Apply per-session stats coming from the backend's session:stats event.
+   *  Updates input/output token totals + lastActivityAt without a re-list. */
+  applySessionStats: (
+    id: SessionId,
+    inputTokensTotal: number,
+    outputTokensTotal: number,
+    lastActivityAt: number,
+  ) => void;
   removeSession: (id: SessionId) => Promise<void>;
 }
 
@@ -407,6 +423,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       set((state) => {
         const s = state.sessions[id];
         if (s) s.title = title;
+      });
+    },
+
+    applySessionStats: (id, inputTokensTotal, outputTokensTotal, lastActivityAt) => {
+      set((state) => {
+        const s = state.sessions[id];
+        if (!s) return;
+        s.inputTokensTotal = inputTokensTotal;
+        s.outputTokensTotal = outputTokensTotal;
+        s.lastActivityAt = lastActivityAt;
       });
     },
 

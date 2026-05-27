@@ -29,6 +29,15 @@ pub struct Session {
     /// Workspace ("page / sheet") this session lives in. Always set after the
     /// 20260528000001_workspaces migration backfilled existing rows to 'default'.
     pub workspace_id: Option<String>,
+    /// Running totals updated when a stream completes (Usage event from
+    /// either transport). Reset only by an explicit clear/delete.
+    pub input_tokens_total: i64,
+    pub output_tokens_total: i64,
+    /// ms-since-epoch of the last stream-done or fork/create.
+    pub last_activity_at: Option<i64>,
+    /// For Claude Code transport: the cwd Claude saw when the session ran.
+    /// Used by the git-branch chip and by future "open project" affordances.
+    pub working_dir: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
