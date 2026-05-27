@@ -49,7 +49,7 @@ export function MessageList({ sessionId }: MessageListProps) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="nodrag nowheel nopan flex-1 space-y-3.5 overflow-y-auto px-3 py-3"
+      className="nodrag nowheel nopan flex-1 space-y-2.5 overflow-y-auto px-3 py-3"
     >
       {ids.map((id) => {
         const m = byId[id];

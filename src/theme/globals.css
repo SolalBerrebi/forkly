@@ -109,10 +109,23 @@ html[data-theme="light"] {
   to { stroke-dashoffset: -10; }
 }
 
+/* Blinking caret at the streaming position inside an assistant message,
+   à la `claude --print` in a terminal. steps(2) gives the hard on/off
+   look instead of a smooth fade. */
+@keyframes caret-blink-anim {
+  50% { opacity: 0; }
+}
+.caret-blink {
+  animation: caret-blink-anim 1.05s steps(2) infinite;
+}
+
 /* ----- chat markdown -------------------------------------------- */
+/* Assistant message body. The wrapping component sets `font-mono` so
+   everything inherits the mono family — gives a Claude-Code-terminal feel
+   while letting react-markdown still produce semantic <p>/<ul>/<pre>. */
 .chat-md > * { margin: 0; }
-.chat-md > * + * { margin-top: 0.5rem; }
-.chat-md p { line-height: 1.55; }
+.chat-md > * + * { margin-top: 0.4rem; }
+.chat-md p { line-height: 1.5; }
 .chat-md code {
   font-family: var(--font-mono);
   background: var(--color-bg);

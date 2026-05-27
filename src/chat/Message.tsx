@@ -20,7 +20,8 @@ function MessageImpl({ message, isStreaming, error }: MessageProps) {
 
   const isUser = message.role === "user";
   const label = isUser ? "you" : message.modelId ?? "assistant";
-  const content = message.content || (isStreaming && !isUser ? "…" : "");
+  const content = message.content;
+  const showStreamingCaret = isStreaming && !isUser;
 
   const handleFork = () => {
     forkSession(message.sessionId, message.id).catch((err) => {
@@ -86,20 +87,27 @@ function MessageImpl({ message, isStreaming, error }: MessageProps) {
         )}
       </div>
 
-      <div className={isUser ? "font-mono text-[12px] leading-relaxed text-fg" : "chat-md font-sans text-[12.5px] text-fg"}>
+      <div className="chat-md font-mono text-[12px] leading-relaxed text-fg">
         {isUser ? (
-          <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
-        ) : (
-          <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS}>{content}</ReactMarkdown>
-        )}
+          <p className="whitespace-pre-wrap wrap-break-word">
+            <span className="select-none text-fg-subtle">{"› "}</span>
+            {message.content}
+          </p>
+        ) : content ? (
+          <>
+            <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS}>{content}</ReactMarkdown>
+            {showStreamingCaret && (
+              <span className="caret-blink ml-0.5 inline-block text-accent-from" aria-hidden>
+                ▍
+              </span>
+            )}
+          </>
+        ) : showStreamingCaret ? (
+          <span className="caret-blink inline-block text-accent-from" aria-hidden>
+            ▍
+          </span>
+        ) : null}
       </div>
-
-      {isStreaming && (
-        <div className="flex items-center gap-1.5 font-mono text-[10px] text-fg-subtle">
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent-from" />
-          streaming
-        </div>
-      )}
       {error && (
         <div className="rounded border border-danger/40 bg-danger/10 px-2 py-1 font-mono text-[10px] text-danger">
           ⚠ {error}

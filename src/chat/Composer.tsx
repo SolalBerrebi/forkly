@@ -48,7 +48,13 @@ export function Composer({ sessionId }: ComposerProps) {
 
   return (
     <div className="nodrag nowheel border-t border-border bg-bg-elevated/60 p-2">
-      <div className="flex items-end gap-2 rounded-md border border-border bg-bg px-2 py-1.5 focus-within:border-border-strong">
+      <div className="group/composer flex items-start gap-2 rounded-md border border-border bg-bg px-2 py-1.5 transition-colors focus-within:border-accent-from/60">
+        <span
+          aria-hidden
+          className="mt-px select-none font-mono text-[12px] leading-relaxed text-fg-subtle group-focus-within/composer:text-accent-from"
+        >
+          ›
+        </span>
         <textarea
           ref={textareaRef}
           value={value}
@@ -70,7 +76,7 @@ export function Composer({ sessionId }: ComposerProps) {
           onClick={send}
           aria-label="Send"
           disabled={!value.trim() || disabled}
-          className="flex h-6 w-6 items-center justify-center rounded text-fg-muted transition-colors hover:text-fg disabled:cursor-not-allowed disabled:opacity-30"
+          className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:bg-bg-elevated hover:text-fg disabled:cursor-not-allowed disabled:opacity-30"
         >
           {busy || isStreaming ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -79,9 +85,16 @@ export function Composer({ sessionId }: ComposerProps) {
           )}
         </button>
       </div>
-      {error && (
-        <div className="mt-1.5 px-1 font-mono text-[10px] text-danger">⚠ {error}</div>
-      )}
+      <div className="mt-1 flex items-center justify-between px-1">
+        {error ? (
+          <div className="font-mono text-[10px] text-danger">⚠ {error}</div>
+        ) : (
+          <div className="font-mono text-[9px] text-fg-subtle/70">
+            <kbd className="rounded border border-border bg-bg px-1 text-fg-muted">↵</kbd> send ·{" "}
+            <kbd className="rounded border border-border bg-bg px-1 text-fg-muted">⇧↵</kbd> newline
+          </div>
+        )}
+      </div>
     </div>
   );
 }
