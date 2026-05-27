@@ -68,6 +68,26 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // Explicitly center, show, and focus the main window. On macOS the
+            // default placement can land off-screen on multi-display setups,
+            // and Tauri's auto-focus doesn't always grab user attention in
+            // dev mode — making this explicit avoids "where is the window?"
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.center();
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+                // Bounce the Dock icon so the user can find the app even if
+                // focus gets stolen by their terminal / IDE on launch. Stops
+                // bouncing as soon as they click it.
+                let _ = window.request_user_attention(Some(
+                    tauri::UserAttentionType::Critical,
+                ));
+                tracing::info!("main window shown + focused + attention requested");
+            } else {
+                tracing::error!("main window not found at setup");
+            }
+
             let handle = app.handle().clone();
             // Spawn (not block_on!) so the main thread continues to the event
             // loop and creates the configured window.

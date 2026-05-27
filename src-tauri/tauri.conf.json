@@ -12,14 +12,18 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Forkly",
-        "width": 1280,
-        "height": 820,
+        "width": 1100,
+        "height": 720,
         "minWidth": 880,
         "minHeight": 600,
         "decorations": true,
         "transparent": false,
-        "resizable": true
+        "resizable": true,
+        "center": true,
+        "focus": true,
+        "visible": true
       }
     ],
     "security": {
