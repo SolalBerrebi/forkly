@@ -1,6 +1,7 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Handle,
+  NodeResizer,
   Position,
   useStore,
   type Node,
@@ -42,13 +43,27 @@ const COMPACT_MIN_ZOOM = 0.35;
 // would return a new array every render and break Zustand snapshot caching.
 const EMPTY_IDS: string[] = [];
 
+// Default cell footprint when a session has no user-overridden size.
+const DEFAULT_WIDTH = 360;
+const DEFAULT_HEIGHT = 460;
+const MIN_WIDTH = 280;
+const MIN_HEIGHT = 240;
+const MAX_WIDTH = 720;
+const MAX_HEIGHT = 900;
+
 export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) {
   const zoom = useStore(zoomSelector);
   const removeSession = useWorkspaceStore((s) => s.removeSession);
+  const updateSessionSize = useWorkspaceStore((s) => s.updateSessionSize);
+  const width = useWorkspaceStore((s) => s.sessions[id]?.width ?? null);
+  const height = useWorkspaceStore((s) => s.sessions[id]?.height ?? null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const mode: "full" | "compact" | "label" =
     zoom >= FULL_MIN_ZOOM ? "full" : zoom >= COMPACT_MIN_ZOOM ? "compact" : "label";
+
+  const effectiveWidth = width ?? DEFAULT_WIDTH;
+  const effectiveHeight = height ?? DEFAULT_HEIGHT;
 
   const handleDelete = async () => {
     try {
@@ -64,14 +79,33 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
         initial={{ opacity: 0, scale: 0.94, y: 6 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        style={{ width: effectiveWidth, height: effectiveHeight }}
         className={[
-          "group relative flex h-115 w-90 flex-col overflow-hidden rounded-[12px] border bg-bg-elevated",
+          "group relative flex flex-col overflow-hidden rounded-[12px] border bg-bg-elevated",
           "shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)] transition-[border-color,box-shadow] duration-200",
           selected
             ? "border-transparent ring-1 ring-accent-from shadow-[0_0_0_1px_var(--color-accent-from),0_0_60px_-8px_color-mix(in_srgb,var(--color-accent-from)_55%,transparent)]"
             : "border-border hover:border-border-strong",
         ].join(" ")}
       >
+        <NodeResizer
+          isVisible={selected}
+          minWidth={MIN_WIDTH}
+          minHeight={MIN_HEIGHT}
+          maxWidth={MAX_WIDTH}
+          maxHeight={MAX_HEIGHT}
+          lineStyle={{ borderColor: "var(--color-accent-from)", borderWidth: 1 }}
+          handleStyle={{
+            background: "var(--color-accent-from)",
+            border: "1px solid var(--color-bg-elevated)",
+            width: 8,
+            height: 8,
+            borderRadius: 2,
+          }}
+          onResize={(_event, params) => {
+            updateSessionSize(id, params.width, params.height);
+          }}
+        />
         <Handle
           type="target"
           position={Position.Left}

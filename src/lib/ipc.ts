@@ -28,6 +28,8 @@ export interface Session {
   outputTokensTotal: number;
   lastActivityAt: number | null;
   workingDir: string | null;
+  width: number | null;
+  height: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -72,6 +74,8 @@ export interface UpdateSessionInput {
   systemPrompt?: string;
   positionX?: number;
   positionY?: number;
+  width?: number;
+  height?: number;
 }
 
 export const ipc = {

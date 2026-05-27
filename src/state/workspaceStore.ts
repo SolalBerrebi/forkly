@@ -38,6 +38,8 @@ export interface Session {
   outputTokensTotal: number;
   lastActivityAt: number | null;
   workingDir: string | null;
+  width: number | null;
+  height: number | null;
 }
 
 export interface AddSessionInput {
@@ -77,6 +79,8 @@ function fromIpc(s: IpcSession): Session {
     outputTokensTotal: s.outputTokensTotal,
     lastActivityAt: s.lastActivityAt,
     workingDir: s.workingDir,
+    width: s.width,
+    height: s.height,
   };
 }
 
@@ -120,6 +124,8 @@ interface WorkspaceState {
   ) => Promise<SessionId[]>;
   mergeSessions: (sourceSessionIds: SessionId[]) => Promise<SessionId>;
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
+  /** Optimistic + debounced-persist resize. Same pattern as position. */
+  updateSessionSize: (id: SessionId, width: number, height: number) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
   updateSessionModel: (id: SessionId, modelId: string) => Promise<void>;
   applyTitleFromBackend: (id: SessionId, title: string) => void;
@@ -135,6 +141,7 @@ interface WorkspaceState {
 }
 
 const positionPersistTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
+const sizePersistTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
 
 function readLastWorkspace(): WorkspaceId {
   if (typeof window === "undefined") return DEFAULT_WORKSPACE_ID;
@@ -410,6 +417,25 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           .catch((err) => console.error("position persist failed", err));
       }, 200);
       positionPersistTimers.set(id, handle);
+    },
+
+    updateSessionSize: (id, width, height) => {
+      set((state) => {
+        const s = state.sessions[id];
+        if (s) {
+          s.width = width;
+          s.height = height;
+        }
+      });
+      const existing = sizePersistTimers.get(id);
+      if (existing) clearTimeout(existing);
+      const handle = setTimeout(() => {
+        sizePersistTimers.delete(id);
+        ipc.updateSession(id, { width, height }).catch((err) =>
+          console.error("size persist failed", err),
+        );
+      }, 200);
+      sizePersistTimers.set(id, handle);
     },
 
     updateSessionTitle: async (id, title) => {

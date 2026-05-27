@@ -38,6 +38,9 @@ pub struct Session {
     /// For Claude Code transport: the cwd Claude saw when the session ran.
     /// Used by the git-branch chip and by future "open project" affordances.
     pub working_dir: Option<String>,
+    /// User-overridden node dimensions; NULL means "use SessionNode default".
+    pub width: Option<f64>,
+    pub height: Option<f64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -82,4 +85,6 @@ pub struct UpdateSessionInput {
     pub system_prompt: Option<String>,
     pub position_x: Option<f64>,
     pub position_y: Option<f64>,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
 }
