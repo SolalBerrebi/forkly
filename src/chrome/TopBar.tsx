@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { useWorkspaceStore } from "../state/workspaceStore";
+import { Tooltip } from "./Tooltip";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function TopBar() {
@@ -46,30 +47,36 @@ export function TopBar() {
       </div>
 
       <div className="pointer-events-auto flex items-center gap-2">
-        <SettingsDialog
-          trigger={
-            <button
-              aria-label="Settings"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/70 text-fg-muted backdrop-blur transition-colors hover:text-fg"
-            >
-              <SettingsIcon className="h-3.5 w-3.5" />
-            </button>
-          }
-        />
-        <button
-          onClick={toggleTheme}
-          aria-label="Toggle theme"
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/70 text-fg-muted backdrop-blur transition-colors hover:text-fg"
-        >
-          {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          onClick={handleAdd}
-          className="flex items-center gap-2 rounded-lg border border-border bg-bg-elevated/70 px-3 py-1.5 font-mono text-xs text-fg backdrop-blur transition-colors hover:border-border-strong hover:bg-bg-elevated"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          new session
-        </button>
+        <Tooltip label="auth & api keys">
+          <SettingsDialog
+            trigger={
+              <button
+                aria-label="Settings"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/70 text-fg-muted backdrop-blur transition-colors hover:text-fg"
+              >
+                <SettingsIcon className="h-3.5 w-3.5" />
+              </button>
+            }
+          />
+        </Tooltip>
+        <Tooltip label={theme === "dark" ? "switch to light" : "switch to dark"}>
+          <button
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/70 text-fg-muted backdrop-blur transition-colors hover:text-fg"
+          >
+            {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+          </button>
+        </Tooltip>
+        <Tooltip label="new session in this workspace">
+          <button
+            onClick={handleAdd}
+            className="flex items-center gap-2 rounded-lg border border-border bg-bg-elevated/70 px-3 py-1.5 font-mono text-xs text-fg backdrop-blur transition-colors hover:border-border-strong hover:bg-bg-elevated"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            new session
+          </button>
+        </Tooltip>
       </div>
     </header>
   );

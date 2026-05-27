@@ -1,3 +1,4 @@
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect } from "react";
 import { ForkCanvas } from "./canvas/ForkCanvas";
@@ -36,12 +37,14 @@ function App() {
   }, []);
 
   return (
-    <ReactFlowProvider>
-      <main className="relative h-screen w-screen overflow-hidden bg-bg">
-        <TopBar />
-        <ForkCanvas />
-      </main>
-    </ReactFlowProvider>
+    <Tooltip.Provider delayDuration={300} skipDelayDuration={150}>
+      <ReactFlowProvider>
+        <main className="relative h-screen w-screen overflow-hidden bg-bg">
+          <TopBar />
+          <ForkCanvas />
+        </main>
+      </ReactFlowProvider>
+    </Tooltip.Provider>
   );
 }
 

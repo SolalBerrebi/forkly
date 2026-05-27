@@ -12,9 +12,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "../chrome/ConfirmDialog";
 import { useMessagesStore } from "../state/messagesStore";
 import { useWorkspaceStore } from "../state/workspaceStore";
+import { CrossGrid } from "./background/CrossGrid";
+import { EmptyState } from "./EmptyState";
 import { LineageEdge, type LineageEdgeType } from "./edges/LineageEdge";
 import { SessionNode, type SessionNodeType } from "./nodes/SessionNode";
-import { CrossGrid } from "./background/CrossGrid";
 
 const nodeTypes = { session: SessionNode };
 const edgeTypes = { lineage: LineageEdge };
@@ -176,17 +177,7 @@ export function ForkCanvas() {
       deleteKeyCode={null}
     >
       <CrossGrid />
-      {isEmpty && (
-        <Panel position="top-center" className="top-1/2! -translate-y-1/2!">
-          <div className="select-none rounded-full border border-border bg-bg-elevated/60 px-4 py-2 font-mono text-xs text-fg-subtle backdrop-blur">
-            press{" "}
-            <kbd className="mx-0.5 rounded border border-border-strong bg-bg px-1.5 py-px text-[10px] text-fg-muted">
-              + new session
-            </kbd>{" "}
-            to start
-          </div>
-        </Panel>
-      )}
+      {isEmpty && <EmptyState />}
       {selectedNodeIds.length >= 2 && (
         <Panel position="top-center" className="top-3!">
           <div className="select-none rounded-full border border-accent-from/40 bg-bg-elevated/80 px-3 py-1.5 font-mono text-[11px] text-fg backdrop-blur">

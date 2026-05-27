@@ -7,6 +7,7 @@ import {
   type NodeProps,
   type ReactFlowState,
 } from "@xyflow/react";
+import { motion } from "framer-motion";
 import { GitFork, MoreHorizontal, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ChatView } from "../../chat/ChatView";
@@ -56,10 +57,13 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
 
   return (
     <>
-      <div
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
         className={[
           "group relative flex h-115 w-90 flex-col overflow-hidden rounded-[12px] border bg-bg-elevated",
-          "shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)] transition-all duration-200",
+          "shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)] transition-[border-color,box-shadow] duration-200",
           selected
             ? "border-transparent ring-1 ring-accent-from shadow-[0_0_0_1px_var(--color-accent-from),0_0_60px_-8px_color-mix(in_srgb,var(--color-accent-from)_55%,transparent)]"
             : "border-border hover:border-border-strong",
@@ -116,7 +120,7 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
         {mode === "full" && <ChatView sessionId={id} />}
         {mode === "compact" && <CompactBody sessionId={id} data={data} />}
         {mode === "label" && <LabelBody data={data} />}
-      </div>
+      </motion.div>
 
       <ConfirmDialog
         open={confirmOpen}
@@ -181,7 +185,7 @@ function CompactBody({ sessionId, data }: { sessionId: string; data: SessionNode
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent-from" />
             )}
           </div>
-          <div className="line-clamp-[10] font-sans text-[12.5px] leading-relaxed text-fg">
+          <div className="line-clamp-10 font-sans text-[12.5px] leading-relaxed text-fg">
             {truncate(lastAssistant, 600)}
           </div>
         </div>
