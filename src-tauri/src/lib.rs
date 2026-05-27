@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod error;
+mod providers;
 mod types;
 
 use sqlx::SqlitePool;
@@ -46,6 +47,7 @@ pub fn run() {
             commands::secrets::has_api_key,
             commands::secrets::set_api_key,
             commands::secrets::delete_api_key,
+            commands::stream::start_stream,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
