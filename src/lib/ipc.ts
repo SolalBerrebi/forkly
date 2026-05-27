@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export type TransportId = "claude-code" | "api";
+
 export interface Session {
   id: string;
   title: string;
   providerId: string;
   modelId: string;
+  transportId: TransportId;
   systemPrompt: string | null;
   positionX: number;
   positionY: number;
@@ -12,6 +15,12 @@ export interface Session {
   forkPointMessageId: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface ClaudeCodeStatus {
+  installed: boolean;
+  version: string | null;
+  loggedIn: boolean;
 }
 
 export interface Message {
@@ -31,6 +40,7 @@ export interface CreateSessionInput {
   title?: string;
   providerId: string;
   modelId: string;
+  transportId?: TransportId;
   systemPrompt?: string;
   positionX?: number;
   positionY?: number;
@@ -42,6 +52,7 @@ export interface UpdateSessionInput {
   title?: string;
   providerId?: string;
   modelId?: string;
+  transportId?: TransportId;
   systemPrompt?: string;
   positionX?: number;
   positionY?: number;
@@ -67,6 +78,9 @@ export const ipc = {
 
   startStream: (sessionId: string, userMessage: string) =>
     invoke<void>("start_stream", { sessionId, userMessage }),
+
+  detectClaudeCode: () =>
+    invoke<ClaudeCodeStatus>("detect_claude_code"),
 };
 
 // Tauri events emitted from start_stream.

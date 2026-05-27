@@ -1,8 +1,11 @@
 use crate::commands::messages::{build_history, insert_message, update_message_content};
 use crate::commands::secrets::read_api_key;
 use crate::error::{AppError, AppResult};
-use crate::providers::anthropic::stream_chat;
-use crate::providers::{ChatMessage, StreamEvent, StreamRequest};
+use crate::providers::{
+    anthropic::stream_chat as stream_chat_api,
+    claude_code::stream_chat as stream_chat_cc,
+    ApiStreamRequest, ChatMessage, ClaudeCodeRequest, StreamEvent,
+};
 use crate::types::{Message, Session};
 use crate::AppState;
 use serde::Serialize;
@@ -43,6 +46,13 @@ pub struct StreamErrorPayload {
     pub error: String,
 }
 
+/// What transport is in play for this turn — decided up front, after we know
+/// the session row but before we touch the DB or the network.
+enum Dispatch {
+    Api(ApiStreamRequest),
+    ClaudeCode(ClaudeCodeRequest),
+}
+
 #[tauri::command]
 pub async fn start_stream(
     app: AppHandle,
@@ -54,7 +64,7 @@ pub async fn start_stream(
 
     // 1. Look up session
     let session = sqlx::query_as::<_, Session>(
-        "SELECT id, title, provider_id, model_id, system_prompt,
+        "SELECT id, title, provider_id, model_id, transport_id, system_prompt,
                 position_x, position_y, parent_session_id, fork_point_message_id,
                 created_at, updated_at
          FROM sessions WHERE id = ?",
@@ -64,18 +74,69 @@ pub async fn start_stream(
     .await?
     .ok_or_else(|| AppError::NotFound(format!("session {session_id}")))?;
 
-    // 2. Read API key from keychain BEFORE doing anything destructive
-    let api_key = read_api_key(&session.provider_id)?;
+    // 2. Determine if this is a continuation of an existing CC session, BEFORE
+    //    we persist the new user message (which would otherwise contaminate
+    //    the count). Only meaningful for transport=claude-code.
+    let prior_message_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+    )
+    .bind(&session.id)
+    .fetch_one(&pool)
+    .await?;
 
-    // 3. Persist the user message
+    // 3. Resolve transport-specific auth BEFORE any destructive writes.
+    //    If auth fails, the user message never gets persisted — clean failure.
+    let dispatch = match session.transport_id.as_str() {
+        "claude-code" => Dispatch::ClaudeCode(ClaudeCodeRequest {
+            model: session.model_id.clone(),
+            system_prompt: session.system_prompt.clone(),
+            user_message: user_message.clone(),
+            session_id: session.id.clone(),
+            is_resume: prior_message_count > 0,
+        }),
+        "api" => {
+            let api_key = read_api_key(&session.provider_id)?;
+            // History is built AFTER persisting the user message below.
+            // Build a placeholder request now; we'll fill `messages` in step 5.
+            Dispatch::Api(ApiStreamRequest {
+                model: session.model_id.clone(),
+                system_prompt: session.system_prompt.clone(),
+                messages: vec![], // populated below
+                max_tokens: 4096,
+                api_key,
+            })
+        }
+        other => {
+            return Err(AppError::BadRequest(format!(
+                "unsupported transport: {other}"
+            )))
+        }
+    };
+
+    // 4. Persist user message.
     let user_msg =
         insert_message(&pool, &session.id, "user", &user_message, None, None).await?;
 
-    // 4. Build full history (now includes the user message we just added).
-    //    For M2 there's no forking so this is just the session's own messages.
-    let history = build_history(&pool, &session.id).await?;
+    // 5. For the API transport, build the full conversation history (now
+    //    includes the user message we just persisted). The CC transport
+    //    doesn't need this — CC owns its own session state.
+    let dispatch = match dispatch {
+        Dispatch::Api(mut req) => {
+            let history = build_history(&pool, &session.id).await?;
+            req.messages = history
+                .iter()
+                .filter(|m| m.role != "system")
+                .map(|m| ChatMessage {
+                    role: m.role.clone(),
+                    content: m.content.clone(),
+                })
+                .collect();
+            Dispatch::Api(req)
+        }
+        cc => cc,
+    };
 
-    // 5. Persist an empty assistant message; we'll update its content as we stream.
+    // 6. Persist an empty assistant message; we'll fill content as we stream.
     let assistant_msg = insert_message(
         &pool,
         &session.id,
@@ -86,7 +147,7 @@ pub async fn start_stream(
     )
     .await?;
 
-    // 6. Emit stream:start so the frontend can render both bubbles immediately.
+    // 7. Notify frontend so it can render both bubbles immediately.
     app.emit(
         "stream:start",
         StreamStartPayload {
@@ -97,45 +158,18 @@ pub async fn start_stream(
     )
     .ok();
 
-    // 7. Build provider request from history.
-    let messages: Vec<ChatMessage> = history
-        .iter()
-        .filter(|m| m.role != "system")
-        .map(|m| ChatMessage {
-            role: m.role.clone(),
-            content: m.content.clone(),
-        })
-        .collect();
-
-    let req = StreamRequest {
-        model: session.model_id.clone(),
-        system_prompt: session.system_prompt.clone(),
-        messages,
-        max_tokens: 4096,
-        api_key,
-    };
-
-    // 8. Spawn the streaming task. Returns immediately; events flow via app.emit.
+    // 8. Spawn the streaming task; returns immediately.
     let app_for_task = app.clone();
-    let provider_id = session.provider_id.clone();
     let session_id_for_task = session.id.clone();
     let assistant_id = assistant_msg.id.clone();
 
     tauri::async_runtime::spawn(async move {
         let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
 
-        // Run provider in a sub-task so we can receive events concurrently.
-        let provider_handle = match provider_id.as_str() {
-            "anthropic" => tauri::async_runtime::spawn(stream_chat(req, tx)),
-            other => {
-                emit_error(
-                    &app_for_task,
-                    &session_id_for_task,
-                    Some(&assistant_id),
-                    format!("unknown provider: {other}"),
-                );
-                return;
-            }
+        // Drive the provider in a sub-task so we can consume events concurrently.
+        let provider_handle = match dispatch {
+            Dispatch::Api(req) => tauri::async_runtime::spawn(stream_chat_api(req, tx)),
+            Dispatch::ClaudeCode(req) => tauri::async_runtime::spawn(stream_chat_cc(req, tx)),
         };
 
         let mut accumulated = String::new();
@@ -168,14 +202,12 @@ pub async fn start_stream(
             }
         }
 
-        // Provider task may still be running (e.g., if we broke on Done); await it
-        // to surface the real result.
         let provider_result = match provider_handle.await {
             Ok(r) => r,
-            Err(join_err) => Err(AppError::Other(format!("task panic: {join_err}"))),
+            Err(je) => Err(AppError::Other(format!("task panic: {je}"))),
         };
 
-        // Always persist whatever we accumulated, even on error.
+        // Persist whatever we accumulated, even on error.
         let _ = update_message_content(
             &pool,
             &assistant_id,
@@ -212,6 +244,11 @@ pub async fn start_stream(
     });
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn detect_claude_code() -> crate::providers::claude_code::DetectionStatus {
+    crate::providers::claude_code::detect().await
 }
 
 fn emit_error(app: &AppHandle, session_id: &str, assistant_id: Option<&str>, error: String) {

@@ -1,5 +1,5 @@
 use crate::error::{AppError, AppResult};
-use crate::providers::{StreamEvent, StreamRequest};
+use crate::providers::{ApiStreamRequest, StreamEvent};
 use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -72,7 +72,7 @@ struct AnthropicError {
     message: String,
 }
 
-pub async fn stream_chat(req: StreamRequest, tx: mpsc::Sender<StreamEvent>) -> AppResult<()> {
+pub async fn stream_chat(req: ApiStreamRequest, tx: mpsc::Sender<StreamEvent>) -> AppResult<()> {
     let simple: Vec<SimpleMessage> = req
         .messages
         .iter()

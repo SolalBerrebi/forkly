@@ -7,7 +7,7 @@ use tauri::State;
 use uuid::Uuid;
 
 const SELECT_SESSION_COLUMNS: &str = "
-    id, title, provider_id, model_id, system_prompt,
+    id, title, provider_id, model_id, transport_id, system_prompt,
     position_x, position_y, parent_session_id, fork_point_message_id,
     created_at, updated_at
 ";
@@ -29,20 +29,24 @@ pub async fn create_session(
     let id = Uuid::new_v4().to_string();
     let now = now_ms();
     let title = input.title.unwrap_or_else(|| "untitled session".to_string());
+    let transport = input
+        .transport_id
+        .unwrap_or_else(|| "claude-code".to_string());
     let px = input.position_x.unwrap_or(0.0);
     let py = input.position_y.unwrap_or(0.0);
 
     sqlx::query(
         "INSERT INTO sessions
-          (id, title, provider_id, model_id, system_prompt,
+          (id, title, provider_id, model_id, transport_id, system_prompt,
            position_x, position_y, parent_session_id, fork_point_message_id,
            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&title)
     .bind(&input.provider_id)
     .bind(&input.model_id)
+    .bind(&transport)
     .bind(&input.system_prompt)
     .bind(px)
     .bind(py)
@@ -83,6 +87,14 @@ pub async fn update_session(
     if let Some(mid) = &patch.model_id {
         sqlx::query("UPDATE sessions SET model_id = ?, updated_at = ? WHERE id = ?")
             .bind(mid)
+            .bind(now)
+            .bind(&id)
+            .execute(&state.db)
+            .await?;
+    }
+    if let Some(tid) = &patch.transport_id {
+        sqlx::query("UPDATE sessions SET transport_id = ?, updated_at = ? WHERE id = ?")
+            .bind(tid)
             .bind(now)
             .bind(&id)
             .execute(&state.db)

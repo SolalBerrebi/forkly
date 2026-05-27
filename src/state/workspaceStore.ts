@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { ipc, type Session as IpcSession } from "../lib/ipc";
+import { ipc, type Session as IpcSession, type TransportId } from "../lib/ipc";
 
 export type SessionId = string;
 
@@ -9,6 +9,7 @@ export interface Session {
   title: string;
   providerId: string;
   modelId: string;
+  transportId: TransportId;
   position: { x: number; y: number };
   parentSessionId: SessionId | null;
   forkPointMessageId: string | null;
@@ -18,6 +19,7 @@ export interface AddSessionInput {
   title?: string;
   providerId?: string;
   modelId?: string;
+  transportId?: TransportId;
   systemPrompt?: string;
   position?: { x: number; y: number };
   parentSessionId?: SessionId | null;
@@ -30,6 +32,7 @@ function fromIpc(s: IpcSession): Session {
     title: s.title,
     providerId: s.providerId,
     modelId: s.modelId,
+    transportId: s.transportId,
     position: { x: s.positionX, y: s.positionY },
     parentSessionId: s.parentSessionId,
     forkPointMessageId: s.forkPointMessageId,
@@ -78,6 +81,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const created = await ipc.createSession({
         providerId: init.providerId ?? "anthropic",
         modelId: init.modelId ?? "claude-sonnet-4-6",
+        transportId: init.transportId ?? "claude-code",
         title: init.title,
         systemPrompt: init.systemPrompt,
         positionX: init.position?.x,

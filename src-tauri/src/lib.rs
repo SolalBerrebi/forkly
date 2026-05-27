@@ -48,6 +48,7 @@ pub fn run() {
             commands::secrets::set_api_key,
             commands::secrets::delete_api_key,
             commands::stream::start_stream,
+            commands::stream::detect_claude_code,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

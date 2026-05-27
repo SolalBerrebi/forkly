@@ -31,7 +31,7 @@ pub async fn list_messages(
 /// Each parent contributes messages up to and including its fork-point.
 pub async fn build_history(pool: &SqlitePool, session_id: &str) -> AppResult<Vec<Message>> {
     let session = sqlx::query_as::<_, crate::types::Session>(
-        "SELECT id, title, provider_id, model_id, system_prompt,
+        "SELECT id, title, provider_id, model_id, transport_id, system_prompt,
                 position_x, position_y, parent_session_id, fork_point_message_id,
                 created_at, updated_at
          FROM sessions WHERE id = ?",
