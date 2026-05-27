@@ -1,9 +1,10 @@
 import { useReactFlow } from "@xyflow/react";
-import { Activity, GitFork, LayoutGrid, Moon, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
+import { Activity, Download, GitFork, LayoutGrid, Moon, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { useWorkspaceStore } from "../state/workspaceStore";
+import { CcImportDialog } from "./CcImportDialog";
 import { NetworkLogDrawer } from "./NetworkLogDrawer";
 import { Tooltip } from "./Tooltip";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -119,6 +120,18 @@ export function TopBar() {
           >
             {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
           </button>
+        </Tooltip>
+        <Tooltip label="import a claude code session">
+          <CcImportDialog
+            trigger={
+              <button
+                aria-label="Import Claude Code session"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-elevated/70 text-fg-muted backdrop-blur transition-colors hover:text-fg"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+            }
+          />
         </Tooltip>
         <Tooltip label="new session in this workspace">
           <button

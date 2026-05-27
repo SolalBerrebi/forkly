@@ -139,6 +139,16 @@ interface WorkspaceState {
    * is unlocked first so the whole tree snaps to a clean layout.
    */
   reorganizeCurrentWorkspace: (unlockAll?: boolean) => void;
+  /**
+   * Import an existing Claude Code session from ~/.claude/projects/ live-linked
+   * — the Forkly session reuses the CC session UUID so future turns
+   * --resume the same underlying file. Returns the new session id.
+   */
+  importCcSession: (
+    projectDir: string,
+    sessionId: string,
+    position: { x: number; y: number },
+  ) => Promise<SessionId>;
   /** Apply per-session stats coming from the backend's session:stats event.
    *  Updates input/output token totals + lastActivityAt without a re-list. */
   applySessionStats: (
@@ -437,6 +447,27 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           .catch((err) => console.error("position persist failed", err));
       }, 200);
       positionPersistTimers.set(id, handle);
+    },
+
+    importCcSession: async (projectDir, sessionId, position) => {
+      const created = await ipc.importCcSession({
+        projectDir,
+        sessionId,
+        workspaceId: get().currentWorkspaceId,
+        positionX: position.x,
+        positionY: position.y,
+      });
+      set((state) => {
+        state.sessions[created.id] = fromIpc(created);
+      });
+      // Re-hydrate the imported session's messages so the canvas shows
+      // the conversation immediately. Fire-and-forget; the chat opens
+      // empty for a frame, then populates.
+      useMessagesStore
+        .getState()
+        .hydrateForSession(created.id)
+        .catch((err) => console.error("hydrate imported session failed", err));
+      return created.id;
     },
 
     reorganizeCurrentWorkspace: (unlockAll = false) => {

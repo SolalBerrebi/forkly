@@ -138,6 +138,9 @@ pub fn run() {
             commands::git::git_branch_for,
             commands::net_log::list_net_log,
             commands::net_log::clear_net_log,
+            commands::cc_sessions::list_cc_projects,
+            commands::cc_sessions::list_cc_sessions,
+            commands::cc_sessions::import_cc_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

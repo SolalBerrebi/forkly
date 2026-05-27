@@ -132,7 +132,37 @@ export const ipc = {
   listNetLog: (limit?: number) =>
     invoke<NetLogEntry[]>("list_net_log", { limit }),
   clearNetLog: () => invoke<void>("clear_net_log"),
+
+  listCcProjects: () => invoke<CcProject[]>("list_cc_projects"),
+  listCcSessions: (projectDir: string) =>
+    invoke<CcSessionSummary[]>("list_cc_sessions", { projectDir }),
+  importCcSession: (input: ImportCcSessionInput) =>
+    invoke<Session>("import_cc_session", { input }),
 };
+
+export interface CcProject {
+  encodedDir: string;
+  cwd: string | null;
+  displayName: string;
+  sessionCount: number;
+  lastActivityMs: number;
+}
+
+export interface CcSessionSummary {
+  sessionId: string;
+  lastActivityMs: number;
+  messageCount: number;
+  firstUserMessage: string | null;
+  modelId: string | null;
+}
+
+export interface ImportCcSessionInput {
+  projectDir: string;
+  sessionId: string;
+  workspaceId: string;
+  positionX: number;
+  positionY: number;
+}
 
 export interface NetLogEntry {
   id: string;
