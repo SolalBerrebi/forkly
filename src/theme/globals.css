@@ -105,6 +105,10 @@ html[data-theme="light"] {
   border-radius: 9999px !important;
 }
 
+@keyframes lineage-flow {
+  to { stroke-dashoffset: -10; }
+}
+
 /* ----- chat markdown -------------------------------------------- */
 .chat-md > * { margin: 0; }
 .chat-md > * + * { margin-top: 0.5rem; }

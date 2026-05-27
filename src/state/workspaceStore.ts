@@ -46,6 +46,11 @@ interface WorkspaceState {
 
   hydrate: () => Promise<void>;
   addSession: (init?: AddSessionInput) => Promise<SessionId>;
+  forkSession: (
+    parentId: SessionId,
+    forkPointMessageId: string,
+    position?: { x: number; y: number },
+  ) => Promise<SessionId>;
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
   removeSession: (id: SessionId) => Promise<void>;
@@ -89,6 +94,38 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         parentSessionId: init.parentSessionId ?? undefined,
         forkPointMessageId: init.forkPointMessageId ?? undefined,
       });
+      set((state) => {
+        state.sessions[created.id] = fromIpc(created);
+      });
+      return created.id;
+    },
+
+    forkSession: async (parentId, forkPointMessageId, position) => {
+      // Read the parent from local state — its provider / model / transport
+      // / system prompt all get inherited by the fork. The frontend is
+      // authoritative for placement; the backend just stores what we send.
+      const parent = useWorkspaceStore.getState().sessions[parentId];
+      if (!parent) {
+        throw new Error(`fork: parent session ${parentId} not in store`);
+      }
+
+      // Default placement: just to the right of the parent + small Y jitter.
+      const pos = position ?? {
+        x: parent.position.x + 420,
+        y: parent.position.y + 60 + (Math.random() - 0.5) * 80,
+      };
+
+      const created = await ipc.createSession({
+        providerId: parent.providerId,
+        modelId: parent.modelId,
+        transportId: parent.transportId,
+        title: "fork",
+        positionX: pos.x,
+        positionY: pos.y,
+        parentSessionId: parentId,
+        forkPointMessageId,
+      });
+
       set((state) => {
         state.sessions[created.id] = fromIpc(created);
       });

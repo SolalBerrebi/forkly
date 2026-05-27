@@ -23,12 +23,12 @@ export function SessionNode({ id, data, selected }: NodeProps<SessionNodeType>) 
     >
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         className="h-2! w-2! border-0! bg-fg-subtle! opacity-0 transition-opacity group-hover:opacity-100"
       />
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         className="h-2! w-2! border-0! bg-fg-subtle! opacity-0 transition-opacity group-hover:opacity-100"
       />
 
