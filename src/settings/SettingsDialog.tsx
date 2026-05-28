@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import type { Appearance } from "../lib/appearance";
 import {
   applyChatTextSize,
   CHAT_TEXT_SIZE_OPTIONS,
@@ -21,6 +22,7 @@ import {
   type ChatTextSize,
 } from "../lib/chatTextSize";
 import { ipc, type ClaudeCodeStatus } from "../lib/ipc";
+import { useAppearance, useSetAppearance } from "../state/appearanceContext";
 
 interface ProviderConfig {
   id: string;
@@ -240,15 +242,65 @@ function StatusPill({
 
 function AppearanceSection() {
   const [size, setSize] = useState<ChatTextSize>(() => getInitialChatTextSize());
+  const appearance = useAppearance();
+  const setAppearance = useSetAppearance();
 
-  const handlePick = (next: ChatTextSize) => {
+  const handlePickSize = (next: ChatTextSize) => {
     setSize(next);
     applyChatTextSize(next);
   };
 
+  const APPEARANCES: Array<{ id: Appearance; label: string; hint: string }> = [
+    { id: "terminal", label: "terminal", hint: "claude code feel" },
+    { id: "chat", label: "chat", hint: "claude.ai feel" },
+  ];
+
   return (
-    <div className="border-b border-border px-5 py-4">
-      <div className="flex items-start justify-between gap-4">
+    <div className="space-y-4 border-b border-border px-5 py-4">
+      {/* Appearance: terminal vs chat ----------------------------------- */}
+      <div className="space-y-2">
+        <div className="flex items-start gap-3">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-bg text-fg-muted">
+            <Sparkles className="h-3.5 w-3.5" />
+          </div>
+          <div className="flex-1 space-y-0.5">
+            <div className="font-mono text-sm text-fg">cell appearance</div>
+            <div className="text-[10px] text-fg-muted">
+              How conversations render inside each session.
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pl-10">
+          {APPEARANCES.map((opt) => {
+            const active = opt.id === appearance;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => setAppearance(opt.id)}
+                aria-pressed={active}
+                className={`flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition-colors ${
+                  active
+                    ? "border-accent-from/50 bg-accent-from/10"
+                    : "border-border bg-bg hover:border-border-strong"
+                }`}
+              >
+                <span
+                  className={`font-mono text-[11px] ${
+                    active ? "text-accent-from" : "text-fg"
+                  }`}
+                >
+                  {opt.label}
+                </span>
+                <span className="text-[9px] text-fg-subtle">{opt.hint}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Chat text size ------------------------------------------------- */}
+      <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
         <div className="flex items-start gap-3">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-bg text-fg-muted">
             <Type className="h-3.5 w-3.5" />
@@ -267,7 +319,7 @@ function AppearanceSection() {
             return (
               <button
                 key={opt.id}
-                onClick={() => handlePick(opt.id)}
+                onClick={() => handlePickSize(opt.id)}
                 aria-pressed={active}
                 title={`${opt.px}px`}
                 className={`flex h-6 w-7 items-center justify-center rounded font-mono text-[10px] transition-colors ${

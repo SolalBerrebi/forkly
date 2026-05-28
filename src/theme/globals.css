@@ -138,6 +138,48 @@ html[data-theme="light"] {
   animation: caret-blink-anim 1.05s steps(2) infinite;
 }
 
+/* Three-dot "thinking" indicator used in chat-mode while an assistant
+   message is streaming. Each dot offset by 160ms so the wave reads
+   left-to-right. */
+@keyframes typing-dot {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-1px); }
+}
+.typing-dots > span {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin: 0 1px;
+  border-radius: 9999px;
+  background: var(--color-accent-from);
+  animation: typing-dot 1.1s ease-in-out infinite;
+}
+.typing-dots > span:nth-child(2) { animation-delay: 0.16s; }
+.typing-dots > span:nth-child(3) { animation-delay: 0.32s; }
+
+/* ----- chat-mode appearance --------------------------------------- */
+/* In chat mode, the assistant body switches to sans-serif (Geist Sans)
+   for that conversational ChatGPT/Claude.ai feel. Code blocks stay mono
+   regardless because they inherit from <code>/<pre>'s own font-family
+   declarations below. */
+html[data-appearance="chat"] .chat-md {
+  font-family: var(--font-sans);
+}
+html[data-appearance="chat"] .chat-md > * + * {
+  margin-top: 0.6rem;
+}
+html[data-appearance="chat"] .chat-md p {
+  line-height: 1.6;
+}
+/* User-message bubble in chat mode. Styled via class so JSX layout
+   (right-alignment, max-width) can also vary cleanly. */
+.chat-bubble-user {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.8rem;
+}
+
 /* ----- chat markdown -------------------------------------------- */
 /* Assistant message body. The wrapping component sets `font-mono` so
    everything inherits the mono family — gives a Claude-Code-terminal feel

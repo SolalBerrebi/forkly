@@ -1,6 +1,7 @@
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ipc } from "../lib/ipc";
+import { useAppearance } from "../state/appearanceContext";
 import { useMessagesStore } from "../state/messagesStore";
 
 interface ComposerProps {
@@ -8,6 +9,7 @@ interface ComposerProps {
 }
 
 export function Composer({ sessionId }: ComposerProps) {
+  const appearance = useAppearance();
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,16 +48,20 @@ export function Composer({ sessionId }: ComposerProps) {
     }
   };
 
+  const isTerminal = appearance === "terminal";
+
   return (
     <div className="nodrag nowheel border-t border-border bg-bg-elevated/60 p-2">
       <div className="group/composer flex items-start gap-2 rounded-md border border-border bg-bg px-2 py-1.5 transition-colors focus-within:border-accent-from/60">
-        <span
-          aria-hidden
-          className="mt-px select-none font-mono leading-relaxed text-fg-subtle group-focus-within/composer:text-accent-from"
-          style={{ fontSize: "var(--chat-text-size)" }}
-        >
-          ›
-        </span>
+        {isTerminal && (
+          <span
+            aria-hidden
+            className="mt-px select-none font-mono leading-relaxed text-fg-subtle group-focus-within/composer:text-accent-from"
+            style={{ fontSize: "var(--chat-text-size)" }}
+          >
+            ›
+          </span>
+        )}
         <textarea
           ref={textareaRef}
           value={value}
@@ -69,10 +75,12 @@ export function Composer({ sessionId }: ComposerProps) {
             }
           }}
           rows={1}
-          placeholder={isStreaming ? "streaming…" : "type a message…"}
+          placeholder={isStreaming ? "streaming…" : isTerminal ? "type a message…" : "Message…"}
           disabled={disabled}
           style={{ fontSize: "var(--chat-text-size)" }}
-          className="flex-1 resize-none bg-transparent font-mono leading-relaxed text-fg outline-none placeholder:text-fg-subtle disabled:opacity-50"
+          className={`flex-1 resize-none bg-transparent leading-relaxed text-fg outline-none placeholder:text-fg-subtle disabled:opacity-50 ${
+            isTerminal ? "font-mono" : "font-sans"
+          }`}
         />
         <button
           onClick={send}

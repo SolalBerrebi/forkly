@@ -19,7 +19,7 @@ import {
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 import { ChatView } from "../../chat/ChatView";
 import { ConfirmDialog } from "../../chrome/ConfirmDialog";
 import { formatCompactCount, formatRelativeTime } from "../../lib/format";
@@ -52,11 +52,13 @@ const COMPACT_MIN_ZOOM = 0.35;
 // would return a new array every render and break Zustand snapshot caching.
 const EMPTY_IDS: string[] = [];
 
-// Default cell footprint when a session has no user-overridden size.
-const DEFAULT_WIDTH = 360;
-const DEFAULT_HEIGHT = 460;
-const MIN_WIDTH = 280;
-const MIN_HEIGHT = 240;
+// Default cell footprint — terminal ratio (≈ 80×24 columns in pixels). People
+// see chat-with-LLM as a terminal session, so the canvas-default mirrors that
+// shape. Users can resize freely (and switch to chat-style via Settings).
+const DEFAULT_WIDTH = 560;
+const DEFAULT_HEIGHT = 400;
+const MIN_WIDTH = 320;
+const MIN_HEIGHT = 220;
 // "Effectively unlimited" — large enough that no monitor will hit the cap,
 // while still keeping a sanity bound so a stray drag can't break the canvas.
 const MAX_WIDTH = 4000;
@@ -258,6 +260,7 @@ function ModelPicker({
   modelId: string;
 }) {
   const updateSessionModel = useWorkspaceStore((s) => s.updateSessionModel);
+  const isStreaming = useMessagesStore((s) => !!s.streamingSessions[sessionId]);
   const options = MODEL_CATALOG[providerId] ?? [];
   const currentLabel = labelForModel(providerId, modelId);
 
@@ -265,7 +268,8 @@ function ModelPicker({
   // chip — matches the old behavior for unknown providers (no dropdown).
   if (options.length === 0) {
     return (
-      <div className="rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted">
+      <div className="flex items-center gap-1.5 rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted">
+        <StatusDot active={isStreaming} />
         {providerId}
       </div>
     );
@@ -276,8 +280,9 @@ function ModelPicker({
       <DropdownMenu.Trigger asChild>
         <button
           aria-label="Switch model"
-          className="flex items-center gap-1 rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted transition-colors hover:bg-bg-elevated hover:text-fg"
+          className="flex items-center gap-1.5 rounded-full bg-bg px-2 py-0.5 font-mono text-[10px] tracking-tight text-fg-muted transition-colors hover:bg-bg-elevated hover:text-fg"
         >
+          <StatusDot active={isStreaming} />
           {currentLabel}
           <ChevronDown className="h-2.5 w-2.5 opacity-60" />
         </button>
@@ -350,43 +355,79 @@ function SessionInfoChips({ sessionId }: { sessionId: string }) {
   }, [workingDir]);
 
   const hasTokens = inputTokens > 0 || outputTokens > 0;
-  const hasAnyChip = hasTokens || turnCount > 0 || lastActivityAt || gitBranch;
-  if (!hasAnyChip) return null;
+  const chips: ReactNode[] = [];
+  if (hasTokens) {
+    chips.push(
+      <span key="tokens" className="flex items-center gap-1 whitespace-nowrap">
+        <ChipLabel>tokens</ChipLabel>
+        <span className="text-fg-muted">{formatCompactCount(inputTokens)}</span>
+        <span className="text-fg-subtle/60">›</span>
+        <span className="text-fg-muted">{formatCompactCount(outputTokens)}</span>
+      </span>,
+    );
+  }
+  if (turnCount > 0) {
+    chips.push(
+      <span key="turns" className="flex items-center gap-1 whitespace-nowrap">
+        <ChipLabel>turns</ChipLabel>
+        <span className="text-fg-muted">{turnCount}</span>
+      </span>,
+    );
+  }
+  if (lastActivityAt) {
+    chips.push(
+      <span key="last" className="flex items-center gap-1 whitespace-nowrap">
+        <ChipLabel>last</ChipLabel>
+        <span className="text-fg-muted">{formatRelativeTime(lastActivityAt)}</span>
+      </span>,
+    );
+  }
+  if (gitBranch) {
+    chips.push(
+      <span key="branch" className="flex items-center gap-1 whitespace-nowrap">
+        <GitBranch className="h-2.5 w-2.5 text-fg-subtle/70" />
+        <span className="truncate text-fg-muted">{gitBranch}</span>
+      </span>,
+    );
+  }
+
+  if (chips.length === 0) return null;
+
+  // Render chips with subtle `·` separators for visual rhythm.
+  const withSeparators: ReactNode[] = [];
+  chips.forEach((chip, i) => {
+    if (i > 0) {
+      withSeparators.push(
+        <span key={`sep-${i}`} className="text-fg-subtle/30">·</span>,
+      );
+    }
+    withSeparators.push(chip);
+  });
 
   return (
-    <div className="flex shrink-0 items-center gap-3 overflow-hidden border-b border-border px-3 py-1 font-mono text-[9px] text-fg-subtle">
-      {hasTokens && (
-        <span className="flex items-center gap-1 whitespace-nowrap">
-          <ChipLabel>tokens</ChipLabel>
-          <span className="text-fg-muted">{formatCompactCount(inputTokens)}</span>
-          <span className="text-fg-subtle/60">›</span>
-          <span className="text-fg-muted">{formatCompactCount(outputTokens)}</span>
-        </span>
-      )}
-      {turnCount > 0 && (
-        <span className="flex items-center gap-1 whitespace-nowrap">
-          <ChipLabel>turns</ChipLabel>
-          <span className="text-fg-muted">{turnCount}</span>
-        </span>
-      )}
-      {lastActivityAt && (
-        <span className="flex items-center gap-1 whitespace-nowrap">
-          <ChipLabel>last</ChipLabel>
-          <span className="text-fg-muted">{formatRelativeTime(lastActivityAt)}</span>
-        </span>
-      )}
-      {gitBranch && (
-        <span className="flex items-center gap-1 whitespace-nowrap">
-          <GitBranch className="h-2.5 w-2.5 text-fg-subtle/70" />
-          <span className="truncate text-fg-muted">{gitBranch}</span>
-        </span>
-      )}
+    <div className="flex shrink-0 items-center gap-2.5 overflow-hidden border-b border-border bg-bg/30 px-3 py-1.5 font-mono text-[9px] text-fg-subtle">
+      {withSeparators}
     </div>
   );
 }
 
 function ChipLabel({ children }: { children: React.ReactNode }) {
   return <span className="text-fg-subtle/60">{children}</span>;
+}
+
+/**
+ * Small state dot next to the model chip. Solid muted when idle; pulses
+ * accent-violet while the session has a streaming assistant message.
+ */
+function StatusDot({ active }: { active: boolean }) {
+  return (
+    <span
+      className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+        active ? "animate-pulse bg-accent-from" : "bg-fg-subtle/50"
+      }`}
+      aria-hidden
+    />
+  );
 }
 
 function CompactBody({ sessionId, data }: { sessionId: string; data: SessionNodeData }) {
