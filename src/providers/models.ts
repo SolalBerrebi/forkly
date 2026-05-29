@@ -23,6 +23,15 @@ export const MODEL_CATALOG: Record<string, ModelOption[]> = {
     { id: "claude-sonnet-4-6", label: "sonnet 4.6", description: "balanced" },
     { id: "claude-haiku-4-5-20251001", label: "haiku 4.5", description: "fastest" },
   ],
+  openai: [
+    { id: "gpt-5.4", label: "gpt 5.4", description: "most capable" },
+    { id: "gpt-5.4-mini", label: "gpt 5.4 mini", description: "balanced" },
+    { id: "gpt-4.5-mini", label: "gpt 4.5 mini", description: "fastest" },
+  ],
+  google: [
+    { id: "gemini-2.5-pro", label: "gemini 2.5 pro", description: "1M context" },
+    { id: "gemini-2.5-flash", label: "gemini 2.5 flash", description: "fastest, free tier" },
+  ],
 };
 
 /**

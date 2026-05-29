@@ -21,8 +21,10 @@ import {
   getInitialChatTextSize,
   type ChatTextSize,
 } from "../lib/chatTextSize";
-import { ipc, type ClaudeCodeStatus } from "../lib/ipc";
+import { ipc, type ClaudeCodeStatus, type OllamaStatus } from "../lib/ipc";
 import { useAppearance, useSetAppearance } from "../state/appearanceContext";
+import { useDetectionStore } from "../state/detectionStore";
+import { TerminalButton } from "../chrome/TerminalButton";
 
 interface ProviderConfig {
   id: string;
@@ -47,6 +49,13 @@ const PROVIDERS: ProviderConfig[] = [
     helpLabel: "platform.openai.com",
     keyHint: "sk-…",
   },
+  {
+    id: "google",
+    name: "Google (Gemini)",
+    helpUrl: "https://aistudio.google.com/apikey",
+    helpLabel: "aistudio.google.com — free tier available",
+    keyHint: "AIza…",
+  },
 ];
 
 export function SettingsDialog({ trigger }: { trigger: ReactNode }) {
@@ -58,14 +67,18 @@ export function SettingsDialog({ trigger }: { trigger: ReactNode }) {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-40 w-125 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-2xl focus:outline-none"
+          className="fixed left-1/2 top-1/2 z-40 flex max-h-[88vh] w-125 -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-(--glass-border) shadow-2xl backdrop-blur-xl backdrop-saturate-140 focus:outline-none"
+          style={{ background: "var(--glass-bg-strong)" }}
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <div className="flex items-start justify-between border-b border-border px-5 py-4">
+          {/* Sticky header — always anchored at the top while the body
+              scrolls underneath. Without this, opening Settings on a short
+              window made the API-keys / Appearance sections inaccessible. */}
+          <div className="flex shrink-0 items-start justify-between border-b border-border px-5 py-4">
             <div className="space-y-1">
-              <Dialog.Title className="font-mono text-sm text-fg">auth</Dialog.Title>
+              <Dialog.Title className="font-mono text-sm text-fg">settings</Dialog.Title>
               <Dialog.Description className="text-xs text-fg-muted">
-                Pick how Forkly reaches Claude.
+                Auth providers, appearance, and API keys.
               </Dialog.Description>
             </div>
             <Dialog.Close
@@ -76,9 +89,13 @@ export function SettingsDialog({ trigger }: { trigger: ReactNode }) {
             </Dialog.Close>
           </div>
 
-          <ClaudeCodeSection />
-          <AppearanceSection />
-          <ApiKeysSection />
+          <div className="chat-scroll flex-1 overflow-y-auto">
+            <ClaudeCodeSection />
+            <CodexSection />
+            <OllamaSection />
+            <AppearanceSection />
+            <ApiKeysSection />
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -160,11 +177,11 @@ function InstallCallout() {
   return (
     <div className="space-y-2">
       <StatusPill tone="danger">not installed</StatusPill>
-      <CommandRow command="npm i -g @anthropic-ai/claude-code" hint="install" />
-      <p className="text-[11px] text-fg-subtle">
-        After installing, run <code className="font-mono text-fg-muted">claude login</code>{" "}
-        and then click the refresh button above.
-      </p>
+      <TerminalButton
+        script="npm install -g @anthropic-ai/claude-code && claude login"
+        label="Install Claude Code + log in"
+        hint="Opens Terminal with the install + login script. Hit ↩ to run."
+      />
     </div>
   );
 }
@@ -175,7 +192,244 @@ function LoginCallout({ version }: { version: string | null }) {
       <StatusPill tone="warn">
         installed{version ? ` · ${version}` : ""} · not logged in
       </StatusPill>
-      <CommandRow command="claude login" hint="run this in your terminal, then refresh" />
+      <TerminalButton
+        script="claude login"
+        label="Log in to Claude Code"
+        hint="Opens Terminal and runs `claude login`. Your browser handles OAuth."
+      />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------- */
+/* Codex (OpenAI subscription)                                          */
+/* -------------------------------------------------------------------- */
+
+function CodexSection() {
+  const [status, setStatus] = useState<ClaudeCodeStatus | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const check = async () => {
+    setRefreshing(true);
+    try {
+      const s = await ipc.detectCodex();
+      setStatus(s);
+    } catch {
+      setStatus({ installed: false, version: null, loggedIn: false });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    check();
+  }, []);
+
+  const ready = !!status?.installed && !!status?.loggedIn;
+
+  return (
+    <div className="space-y-3 border-b border-border bg-bg-elevated/40 px-5 py-4">
+      <div className="flex items-start gap-3">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border"
+          style={{
+            background: "color-mix(in srgb, #10a37f 14%, transparent)",
+            color: "#10a37f",
+          }}
+        >
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <div className="flex-1 space-y-0.5">
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-sm text-fg">codex (chatgpt)</div>
+            <span
+              className="rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider"
+              style={{
+                background: "color-mix(in srgb, #10a37f 16%, transparent)",
+                color: "#10a37f",
+              }}
+            >
+              subscription
+            </span>
+          </div>
+          <div className="text-xs text-fg-muted">
+            Use your ChatGPT Plus / Pro / Business plan via Codex CLI. No API charges.
+          </div>
+        </div>
+        <button
+          onClick={check}
+          disabled={refreshing}
+          aria-label="Recheck"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-bg hover:text-fg disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      {status === null ? (
+        <StatusPill tone="muted">
+          <Loader2 className="h-3 w-3 animate-spin" /> checking…
+        </StatusPill>
+      ) : ready ? (
+        <StatusPill tone="success">
+          <Check className="h-3 w-3" />
+          ready · {status.version}
+        </StatusPill>
+      ) : !status.installed ? (
+        <CodexInstallCallout />
+      ) : (
+        <CodexLoginCallout version={status.version} />
+      )}
+    </div>
+  );
+}
+
+function CodexInstallCallout() {
+  return (
+    <div className="space-y-2">
+      <StatusPill tone="danger">not installed</StatusPill>
+      <TerminalButton
+        script="npm install -g @openai/codex && codex login"
+        label="Install Codex CLI + log in"
+        hint="Opens Terminal with the install + login script. Hit ↩ to run."
+      />
+    </div>
+  );
+}
+
+function CodexLoginCallout({ version }: { version: string | null }) {
+  return (
+    <div className="space-y-2">
+      <StatusPill tone="warn">
+        installed{version ? ` · ${version}` : ""} · not logged in
+      </StatusPill>
+      <TerminalButton
+        script="codex login"
+        label="Log in to ChatGPT"
+        hint="Opens Terminal and runs `codex login`. Your browser handles OAuth."
+      />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------- */
+/* Ollama (local, free)                                                 */
+/* -------------------------------------------------------------------- */
+
+function OllamaSection() {
+  const [status, setStatus] = useState<OllamaStatus | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const check = async () => {
+    setRefreshing(true);
+    try {
+      const s = await ipc.detectOllama();
+      setStatus(s);
+    } catch {
+      setStatus({ running: false, models: [] });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    check();
+  }, []);
+
+  const running = !!status?.running;
+  const modelCount = status?.models.length ?? 0;
+
+  return (
+    <div className="space-y-3 border-b border-border bg-bg-elevated/40 px-5 py-4">
+      <div className="flex items-start gap-3">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border"
+          style={{
+            background: "color-mix(in srgb, #ec4899 14%, transparent)",
+            color: "#ec4899",
+          }}
+        >
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <div className="flex-1 space-y-0.5">
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-sm text-fg">ollama</div>
+            <span
+              className="rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider"
+              style={{
+                background: "color-mix(in srgb, #ec4899 16%, transparent)",
+                color: "#ec4899",
+              }}
+            >
+              local · free
+            </span>
+          </div>
+          <div className="text-xs text-fg-muted">
+            Run open models on your machine. Zero cost, zero internet, no keys.
+          </div>
+        </div>
+        <button
+          onClick={check}
+          disabled={refreshing}
+          aria-label="Recheck"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-bg hover:text-fg disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      {status === null ? (
+        <StatusPill tone="muted">
+          <Loader2 className="h-3 w-3 animate-spin" /> checking…
+        </StatusPill>
+      ) : running ? (
+        <div className="space-y-2">
+          <StatusPill tone="success">
+            <Check className="h-3 w-3" />
+            running · {modelCount} {modelCount === 1 ? "model" : "models"}
+          </StatusPill>
+          {modelCount === 0 ? (
+            <div className="space-y-2">
+              <p className="text-[11px] text-fg-subtle">
+                No models installed yet. Pull one to start.
+              </p>
+              <CommandRow command="ollama pull llama3.2" hint="small, fast — good first model" />
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {status!.models.slice(0, 6).map((m) => (
+                <span
+                  key={m.id}
+                  className="rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-[10px] text-fg-muted"
+                >
+                  {m.id.replace(":latest", "")}
+                </span>
+              ))}
+              {modelCount > 6 && (
+                <span className="font-mono text-[10px] text-fg-subtle">
+                  +{modelCount - 6} more
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <StatusPill tone="warn">not running</StatusPill>
+          <p className="text-[11px] text-fg-subtle">
+            Install from{" "}
+            <a
+              href="https://ollama.com/download"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent-from underline"
+            >
+              ollama.com/download
+            </a>{" "}
+            then run <code className="font-mono text-fg-muted">ollama serve</code> and refresh.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -398,6 +652,8 @@ function ApiKeyRow({ provider }: { provider: ProviderConfig }) {
     };
   }, [provider.id]);
 
+  const refreshDetection = useDetectionStore((s) => s.refresh);
+
   const handleSave = async () => {
     setError(null);
     setBusy(true);
@@ -406,6 +662,9 @@ function ApiKeyRow({ provider }: { provider: ProviderConfig }) {
       setIsSet(true);
       setIsEditing(false);
       setValue("");
+      // Refresh the cache so the cross-LLM fork picker picks up the new
+      // provider without waiting for an app restart.
+      refreshDetection().catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -421,6 +680,7 @@ function ApiKeyRow({ provider }: { provider: ProviderConfig }) {
       setIsSet(false);
       setIsEditing(false);
       setValue("");
+      refreshDetection().catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

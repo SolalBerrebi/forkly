@@ -3,9 +3,13 @@ use crate::commands::net_log::{self, LogEntry};
 use crate::commands::secrets::read_api_key;
 use crate::error::{AppError, AppResult};
 use crate::providers::{
-    anthropic::stream_chat as stream_chat_api,
+    anthropic::stream_chat as stream_chat_anthropic,
     claude_code::stream_chat as stream_chat_cc,
-    ApiStreamRequest, ChatMessage, ClaudeCodeRequest, StreamEvent,
+    codex::stream_chat as stream_chat_codex,
+    google::stream_chat as stream_chat_google,
+    ollama::stream_chat as stream_chat_ollama,
+    openai::stream_chat as stream_chat_openai,
+    ApiStreamRequest, ChatMessage, ClaudeCodeRequest, CodexRequest, OllamaRequest, StreamEvent,
 };
 use crate::types::{Message, Session};
 use crate::AppState;
@@ -61,10 +65,17 @@ pub struct SessionStatsPayload {
 }
 
 /// What transport is in play for this turn — decided up front, after we know
-/// the session row but before we touch the DB or the network.
+/// the session row but before we touch the DB or the network. The `Api`
+/// variants share `ApiStreamRequest` since they all take the same shape of
+/// "messages + system + model + key" but differ in the HTTP backend they
+/// route to.
 enum Dispatch {
-    Api(ApiStreamRequest),
+    AnthropicApi(ApiStreamRequest),
+    OpenAiApi(ApiStreamRequest),
+    GoogleApi(ApiStreamRequest),
     ClaudeCode(ClaudeCodeRequest),
+    Codex(CodexRequest),
+    Ollama(OllamaRequest),
 }
 
 #[tauri::command]
@@ -84,6 +95,7 @@ pub async fn start_stream(
                 input_tokens_total, output_tokens_total, last_activity_at, working_dir,
                 width, height, position_locked,
                 pre_expand_width, pre_expand_height,
+                appearance_override,
                 created_at, updated_at
          FROM sessions WHERE id = ?",
     )
@@ -104,15 +116,17 @@ pub async fn start_stream(
 
     // 3. Pre-flight: read transport-specific auth BEFORE any destructive writes.
     //    If auth fails, the user message never gets persisted — clean failure.
-    let api_key = if session.transport_id == "api" {
-        Some(read_api_key(&session.provider_id)?)
-    } else if session.transport_id != "claude-code" {
-        return Err(AppError::BadRequest(format!(
-            "unsupported transport: {}",
-            session.transport_id
-        )));
-    } else {
-        None
+    let api_key = match session.transport_id.as_str() {
+        "api" => Some(read_api_key(&session.provider_id)?),
+        // CLI transports use OAuth tokens managed by the CLI itself; no key.
+        "claude-code" | "codex" => None,
+        // Local Ollama needs no auth at all.
+        "ollama" => None,
+        other => {
+            return Err(AppError::BadRequest(format!(
+                "unsupported transport: {other}"
+            )));
+        }
     };
 
     // 4. If this is the first turn of a merge node, REPLACE the incoming
@@ -143,20 +157,34 @@ pub async fn start_stream(
 
     // 6. Build the dispatch.
     let dispatch = match session.transport_id.as_str() {
-        "api" => Dispatch::Api(ApiStreamRequest {
-            model: session.model_id.clone(),
-            system_prompt: session.system_prompt.clone(),
-            messages: history
-                .iter()
-                .filter(|m| m.role != "system")
-                .map(|m| ChatMessage {
-                    role: m.role.clone(),
-                    content: m.content.clone(),
-                })
-                .collect(),
-            max_tokens: 4096,
-            api_key: api_key.expect("api_key resolved above"),
-        }),
+        "api" => {
+            let req = ApiStreamRequest {
+                model: session.model_id.clone(),
+                system_prompt: session.system_prompt.clone(),
+                messages: history
+                    .iter()
+                    .filter(|m| m.role != "system")
+                    .map(|m| ChatMessage {
+                        role: m.role.clone(),
+                        content: m.content.clone(),
+                    })
+                    .collect(),
+                max_tokens: 4096,
+                api_key: api_key.expect("api_key resolved above"),
+            };
+            // Route on provider — same transport_id ("api") covers multiple
+            // HTTP backends, each with its own wire protocol.
+            match session.provider_id.as_str() {
+                "anthropic" => Dispatch::AnthropicApi(req),
+                "openai" => Dispatch::OpenAiApi(req),
+                "google" => Dispatch::GoogleApi(req),
+                other => {
+                    return Err(AppError::BadRequest(format!(
+                        "unsupported api provider: {other}"
+                    )));
+                }
+            }
+        }
         "claude-code" => {
             let is_fork_first_turn =
                 session.parent_session_id.is_some() && prior_message_count == 0;
@@ -178,6 +206,35 @@ pub async fn start_stream(
                 is_resume: prior_message_count > 0,
             })
         }
+        "codex" => {
+            // Codex can't be `--resume`d with a Forkly-controlled id (it
+            // assigns its own thread_id server-side). Rather than introduce
+            // a column to track it, we send the full conversation as a single
+            // prompt on every turn — same approach as HTTP API transports.
+            let inherited = &history[..history.len().saturating_sub(1)];
+            let prompt = if inherited.is_empty() {
+                user_message.clone()
+            } else {
+                format_fork_prelude(inherited, &user_message)
+            };
+            Dispatch::Codex(CodexRequest {
+                model: session.model_id.clone(),
+                system_prompt: session.system_prompt.clone(),
+                prompt,
+            })
+        }
+        "ollama" => Dispatch::Ollama(OllamaRequest {
+            model: session.model_id.clone(),
+            system_prompt: session.system_prompt.clone(),
+            messages: history
+                .iter()
+                .filter(|m| m.role != "system")
+                .map(|m| ChatMessage {
+                    role: m.role.clone(),
+                    content: m.content.clone(),
+                })
+                .collect(),
+        }),
         _ => unreachable!("validated above"),
     };
 
@@ -216,13 +273,26 @@ pub async fn start_stream(
 
         // Drive the provider in a sub-task so we can consume events concurrently.
         let provider_handle = match dispatch {
-            Dispatch::Api(req) => tauri::async_runtime::spawn(stream_chat_api(req, tx)),
+            Dispatch::AnthropicApi(req) => {
+                tauri::async_runtime::spawn(stream_chat_anthropic(req, tx))
+            }
+            Dispatch::OpenAiApi(req) => tauri::async_runtime::spawn(stream_chat_openai(req, tx)),
+            Dispatch::GoogleApi(req) => tauri::async_runtime::spawn(stream_chat_google(req, tx)),
             Dispatch::ClaudeCode(req) => tauri::async_runtime::spawn(stream_chat_cc(req, tx)),
+            Dispatch::Codex(req) => tauri::async_runtime::spawn(stream_chat_codex(req, tx)),
+            Dispatch::Ollama(req) => tauri::async_runtime::spawn(stream_chat_ollama(req, tx)),
         };
 
         let mut accumulated = String::new();
         let mut input_tokens: Option<i64> = None;
         let mut output_tokens: Option<i64> = None;
+        // Capture raw upstream lines for inclusion in the network-log
+        // detail. Bounded so a particularly chatty Codex CLI doesn't
+        // balloon the log entry. Kept regardless of success/failure so the
+        // user can always see what actually came over the wire.
+        let mut trace_buf: Vec<String> = Vec::new();
+        const MAX_TRACE_BYTES: usize = 4096;
+        let mut trace_bytes: usize = 0;
 
         while let Some(ev) = rx.recv().await {
             match ev {
@@ -246,6 +316,12 @@ pub async fn start_stream(
                     input_tokens = it;
                     output_tokens = ot;
                 }
+                StreamEvent::Trace(line) => {
+                    if trace_bytes < MAX_TRACE_BYTES {
+                        trace_bytes += line.len() + 1;
+                        trace_buf.push(line);
+                    }
+                }
                 StreamEvent::Done => break,
             }
         }
@@ -266,6 +342,54 @@ pub async fn start_stream(
         .await;
 
         match provider_result {
+            Ok(()) if accumulated.trim().is_empty() => {
+                // Provider succeeded but emitted zero content — most commonly
+                // a model returning empty due to content policy, max_tokens=0,
+                // or an upstream silently dropping the reply. Surface it so
+                // the user doesn't stare at an empty bubble wondering why.
+                tracing::warn!(
+                    session = %session_id_for_task,
+                    transport = %transport_for_log,
+                    model = %model_for_log,
+                    "stream completed with empty content"
+                );
+                let detail = if trace_buf.is_empty() {
+                    format!(
+                        "Empty response from {} ({}). No upstream lines captured.",
+                        transport_for_log, model_for_log
+                    )
+                } else {
+                    format!(
+                        "Empty response from {} ({}). Raw upstream lines below — the event types in `\"type\":\"...\"` tell us how to extend the parser.\n\n{}",
+                        transport_for_log,
+                        model_for_log,
+                        trace_buf.join("\n")
+                    )
+                };
+                net_log::record(
+                    &app_for_task,
+                    LogEntry {
+                        id: net_log::new_entry_id(),
+                        timestamp_ms: log_started_at,
+                        transport: transport_for_log.clone(),
+                        method: log_method(&transport_for_log, &model_for_log),
+                        status: "empty".to_string(),
+                        duration_ms: Some(crate::db::now_ms() - log_started_at),
+                        input_tokens,
+                        output_tokens,
+                        session_id: Some(session_id_for_task.clone()),
+                        detail: Some(detail),
+                    },
+                );
+                emit_error(
+                    &app_for_task,
+                    &session_id_for_task,
+                    Some(&assistant_id),
+                    format!(
+                        "no response from {model_for_log}. open the network log (⌘⇧N) to see the raw upstream call."
+                    ),
+                );
+            }
             Ok(()) => {
                 // Accumulate per-session stats (token totals + last_activity_at)
                 // and emit a session:stats event so the canvas info chips
@@ -368,6 +492,16 @@ pub async fn detect_claude_code() -> crate::providers::claude_code::DetectionSta
     crate::providers::claude_code::detect().await
 }
 
+#[tauri::command]
+pub async fn detect_codex() -> crate::providers::codex::DetectionStatus {
+    crate::providers::codex::detect().await
+}
+
+#[tauri::command]
+pub async fn detect_ollama() -> crate::providers::ollama::OllamaStatus {
+    crate::providers::ollama::detect().await
+}
+
 /// Build the synthesis prompt for a merge node's first turn — collects
 /// each source session's final assistant response and asks the model to
 /// distill them into a single best-of answer.
@@ -458,6 +592,17 @@ fn format_fork_prelude(inherited: &[Message], new_user_message: &str) -> String 
 fn log_method(transport: &str, model: &str) -> String {
     match transport {
         "claude-code" => format!("claude --print --model {model}"),
+        "codex" => format!("codex exec --json --model {model}"),
+        "ollama" => format!("POST localhost:11434/api/chat (model={model})"),
+        // For "api" we'd ideally vary the URL per provider; the log layer
+        // doesn't know about provider_id today, so we use the model name as
+        // a proxy. Anthropic models start with "claude-", OpenAI with "gpt-".
+        "api" if model.starts_with("gpt-") || model.starts_with("o") => {
+            format!("POST /v1/chat/completions (model={model})")
+        }
+        "api" if model.starts_with("gemini-") => {
+            format!("POST :streamGenerateContent (model={model})")
+        }
         "api" => format!("POST /v1/messages (model={model})"),
         other => format!("{other} (model={model})"),
     }

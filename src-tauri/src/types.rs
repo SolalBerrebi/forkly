@@ -48,6 +48,9 @@ pub struct Session {
     /// hold the dimensions to restore on collapse. Cleared on collapse.
     pub pre_expand_width: Option<f64>,
     pub pre_expand_height: Option<f64>,
+    /// Per-session appearance override. NULL = follow the global setting;
+    /// "terminal" or "chat" pin this cell to that mode.
+    pub appearance_override: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -95,4 +98,8 @@ pub struct UpdateSessionInput {
     pub width: Option<f64>,
     pub height: Option<f64>,
     pub position_locked: Option<i64>,
+    /// "terminal" | "chat" to lock; pass an empty string to clear back to
+    /// "follow global". We use Option<Option<String>>-by-convention via a
+    /// sentinel: see commands/sessions.rs::update_session.
+    pub appearance_override: Option<String>,
 }

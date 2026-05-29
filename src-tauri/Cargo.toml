@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A spatial canvas for LLM conversations — fork, branch, and visualize your AI sessions."
 authors = ["Forkly contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/forkly/forkly"
+repository = "https://github.com/SolalBerrebi/forkly"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -45,4 +45,5 @@ futures-util = "0.3"
 eventsource-stream = "0.2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+urlencoding = "2.1.3"
 

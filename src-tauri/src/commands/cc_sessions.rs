@@ -411,5 +411,6 @@ const SESSION_SELECT: &str = "
     input_tokens_total, output_tokens_total, last_activity_at, working_dir,
     width, height, position_locked,
     pre_expand_width, pre_expand_height,
+    appearance_override,
     created_at, updated_at
 ";

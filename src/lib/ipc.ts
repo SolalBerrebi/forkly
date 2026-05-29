@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type TransportId = "claude-code" | "api";
+export type TransportId = "claude-code" | "api" | "codex" | "ollama";
 
 export interface Workspace {
   id: string;
@@ -33,6 +33,8 @@ export interface Session {
   positionLocked: number;
   preExpandWidth: number | null;
   preExpandHeight: number | null;
+  /** "terminal" | "chat" | null. NULL means "follow global setting". */
+  appearanceOverride: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -41,6 +43,17 @@ export interface ClaudeCodeStatus {
   installed: boolean;
   version: string | null;
   loggedIn: boolean;
+}
+
+export interface OllamaModel {
+  id: string;
+  sizeBytes: number | null;
+  modifiedAt: string | null;
+}
+
+export interface OllamaStatus {
+  running: boolean;
+  models: OllamaModel[];
 }
 
 export interface Message {
@@ -80,6 +93,8 @@ export interface UpdateSessionInput {
   width?: number;
   height?: number;
   positionLocked?: number;
+  /** "" clears (back to follow-global), "terminal" or "chat" sets the override. */
+  appearanceOverride?: string;
 }
 
 export const ipc = {
@@ -126,6 +141,18 @@ export const ipc = {
 
   detectClaudeCode: () =>
     invoke<ClaudeCodeStatus>("detect_claude_code"),
+  detectCodex: () =>
+    invoke<ClaudeCodeStatus>("detect_codex"),
+  detectOllama: () =>
+    invoke<OllamaStatus>("detect_ollama"),
+  /**
+   * Open the user's default terminal with the given shell script pre-typed.
+   * The user reviews and hits enter — we don't auto-execute. Used by
+   * onboarding so install + login flows are one click instead of "copy
+   * this command, switch apps, paste, hit enter."
+   */
+  runInTerminal: (script: string) =>
+    invoke<void>("run_in_terminal", { script }),
 
   autoTitle: (sessionId: string) =>
     invoke<string>("auto_title", { sessionId }),

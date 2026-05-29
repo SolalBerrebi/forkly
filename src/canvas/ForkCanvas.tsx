@@ -4,11 +4,12 @@ import {
   MiniMap,
   Panel,
   applyNodeChanges,
+  useReactFlow,
   type Node,
   type NodeChange,
   type OnSelectionChangeParams,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "../chrome/ConfirmDialog";
 import { useMessagesStore } from "../state/messagesStore";
 import { useWorkspaceStore } from "../state/workspaceStore";
@@ -33,11 +34,19 @@ function sameIds(a: readonly string[], b: readonly string[]) {
   return true;
 }
 
+// Click on a node that isn't already in the comfort zone of the viewport →
+// animate to bring it to center. Works at any zoom level: a cell peeking in
+// from the screen edge becomes clickable and snaps to the middle without the
+// user having to pan there manually. Already-centered cells stay put so
+// normal interaction (selecting, clicking on chat content) isn't disturbed.
+const OFF_CENTER_FRACTION = 0.15; // 15% of screen size from the middle
+
 export function ForkCanvas() {
   const sessions = useWorkspaceStore((s) => s.sessions);
   const updatePosition = useWorkspaceStore((s) => s.updateSessionPosition);
   const mergeSessions = useWorkspaceStore((s) => s.mergeSessions);
   const removeSession = useWorkspaceStore((s) => s.removeSession);
+  const flow = useReactFlow();
   // Subscribe ONLY to start/stop transitions, not to every token delta —
   // edges depend on this, so observing per-delta state caused the infinite
   // render storm + 12GB memory blowout.
@@ -46,14 +55,28 @@ export function ForkCanvas() {
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [deleteCandidates, setDeleteCandidates] = useState<string[] | null>(null);
 
+  // Cache of measured dimensions per node. xyflow emits dimension changes
+  // once it has rendered + measured a node; we stash them here and merge
+  // them back into the next nodes prop. Without this, every render rebuilds
+  // nodes from `sessions` with no `measured` field, and dragging a node
+  // before its next render cycle triggers xyflow's "node not initialized"
+  // warning.
+  const measuredRef = useRef<Map<string, { width: number; height: number }>>(
+    new Map(),
+  );
+
   const nodes = useMemo<SessionNodeType[]>(
     () =>
-      Object.values(sessions).map((s) => ({
-        id: s.id,
-        type: "session",
-        position: s.position,
-        data: { title: s.title, providerId: s.providerId, modelId: s.modelId },
-      })),
+      Object.values(sessions).map((s) => {
+        const measured = measuredRef.current.get(s.id);
+        return {
+          id: s.id,
+          type: "session",
+          position: s.position,
+          data: { title: s.title, providerId: s.providerId, modelId: s.modelId },
+          ...(measured ? { measured } : {}),
+        };
+      }),
     [sessions],
   );
 
@@ -85,6 +108,18 @@ export function ForkCanvas() {
 
   const onNodesChange = useCallback(
     (changes: NodeChange<SessionNodeType>[]) => {
+      // Capture dimension changes into our cache so the next render of
+      // `nodes` carries them through. Position changes go to the workspace
+      // store (debounced persistence). Other changes (select, etc.) xyflow
+      // tracks internally — we don't need to mirror them.
+      for (const change of changes) {
+        if (change.type === "dimensions" && change.dimensions) {
+          measuredRef.current.set(change.id, {
+            width: change.dimensions.width,
+            height: change.dimensions.height,
+          });
+        }
+      }
       const next = applyNodeChanges(changes, nodes) as Node[];
       for (const node of next) {
         const orig = sessions[node.id];
@@ -107,6 +142,40 @@ export function ForkCanvas() {
       setSelectedNodeIds((prev) => (sameIds(prev, newIds) ? prev : newIds));
     },
     [],
+  );
+
+  // Click-to-focus: re-centre the clicked node if it's currently visually
+  // off-centre (peeking in from a screen edge, or far from the middle).
+  // Already-centred nodes are skipped so clicking inside a node you're
+  // already reading doesn't yank the viewport around.
+  const onNodeClick = useCallback(
+    (_e: React.MouseEvent, node: Node) => {
+      const live = flow.getNode(node.id) ?? node;
+      const { x: vpX, y: vpY, zoom } = flow.getViewport();
+      // Node dimensions: prefer the measured size xyflow tracks, fall back
+      // to width/height fields on the node (set by NodeResizer), then to
+      // a sensible default.
+      const nWidth = live.measured?.width ?? live.width ?? 560;
+      const nHeight = live.measured?.height ?? live.height ?? 400;
+      const screenCenterX = (live.position.x + nWidth / 2) * zoom + vpX;
+      const screenCenterY = (live.position.y + nHeight / 2) * zoom + vpY;
+      const winCenterX = window.innerWidth / 2;
+      const winCenterY = window.innerHeight / 2;
+      const dx = Math.abs(screenCenterX - winCenterX);
+      const dy = Math.abs(screenCenterY - winCenterY);
+      const offCenter =
+        dx > window.innerWidth * OFF_CENTER_FRACTION ||
+        dy > window.innerHeight * OFF_CENTER_FRACTION;
+      if (!offCenter) return;
+      // Re-centre at the current zoom — the user picked their zoom, we don't
+      // change it. Just slide the viewport so this node lands in the middle.
+      flow.setCenter(
+        live.position.x + nWidth / 2,
+        live.position.y + nHeight / 2,
+        { duration: 420, zoom },
+      );
+    },
+    [flow],
   );
 
   // Canvas-level keyboard shortcuts.
@@ -164,6 +233,7 @@ export function ForkCanvas() {
       edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
       onSelectionChange={onSelectionChange}
+      onNodeClick={onNodeClick}
       proOptions={PRO_OPTIONS}
       minZoom={0.1}
       maxZoom={2.5}

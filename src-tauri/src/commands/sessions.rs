@@ -13,6 +13,7 @@ const SELECT_SESSION_COLUMNS: &str = "
     input_tokens_total, output_tokens_total, last_activity_at, working_dir,
     width, height, position_locked,
     pre_expand_width, pre_expand_height,
+    appearance_override,
     created_at, updated_at
 ";
 
@@ -163,6 +164,23 @@ pub async fn update_session(
             "UPDATE sessions SET position_locked = ?, updated_at = ? WHERE id = ?",
         )
         .bind(locked)
+        .bind(now)
+        .bind(&id)
+        .execute(pool)
+        .await?;
+    }
+    // Empty string is the sentinel for "clear back to follow-global", which we
+    // store as SQL NULL. Anything else ("terminal" or "chat") is stored as-is.
+    if let Some(appearance) = &patch.appearance_override {
+        let value: Option<&str> = if appearance.is_empty() {
+            None
+        } else {
+            Some(appearance.as_str())
+        };
+        sqlx::query(
+            "UPDATE sessions SET appearance_override = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(value)
         .bind(now)
         .bind(&id)
         .execute(pool)

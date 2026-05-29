@@ -5,5 +5,6 @@ pub mod net_log;
 pub mod secrets;
 pub mod sessions;
 pub mod stream;
+pub mod terminal;
 pub mod titling;
 pub mod workspaces;

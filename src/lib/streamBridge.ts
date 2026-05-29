@@ -48,6 +48,16 @@ export async function subscribeStreamEvents(): Promise<UnlistenFn> {
 
   unsubs.push(
     await listen<StreamErrorPayload>("stream:error", (e) => {
+      // Log every upstream failure to the console so a silent empty bubble
+      // doesn't hide the real cause (model not found, 401, rate limit, etc.).
+      // The error also lands on the assistant message via failStream, but
+      // a console line makes it dramatically easier to debug live.
+      console.error(
+        "[stream:error]",
+        e.payload.sessionId,
+        e.payload.assistantMessageId,
+        e.payload.error,
+      );
       failStream(
         e.payload.assistantMessageId,
         e.payload.sessionId,

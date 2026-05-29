@@ -67,6 +67,20 @@ export function NetworkLogDrawer({ open, onClose }: NetworkLogDrawerProps) {
     }
   }, []);
 
+  // Escape closes the drawer. We mount this listener only while open so it
+  // doesn't shadow xyflow's own Escape handling at rest.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
   // Newest first.
   const ordered = [...entries].reverse();
 
@@ -79,7 +93,7 @@ export function NetworkLogDrawer({ open, onClose }: NetworkLogDrawerProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
+            className="pointer-events-auto fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
             onClick={onClose}
           />
           <motion.aside
@@ -87,7 +101,8 @@ export function NetworkLogDrawer({ open, onClose }: NetworkLogDrawerProps) {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col border-l border-border bg-bg-elevated shadow-2xl"
+            className="pointer-events-auto fixed right-0 top-0 z-50 flex h-full w-120 flex-col border-l border-(--glass-border) shadow-2xl backdrop-blur-xl backdrop-saturate-140"
+            style={{ background: "var(--glass-bg-strong)" }}
             role="dialog"
             aria-label="Network log"
           >
@@ -117,7 +132,7 @@ export function NetworkLogDrawer({ open, onClose }: NetworkLogDrawerProps) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="chat-scroll flex-1 overflow-y-auto">
               {ordered.length === 0 ? (
                 <div className="flex h-full items-center justify-center px-6 text-center">
                   <div className="font-mono text-xs text-fg-subtle">

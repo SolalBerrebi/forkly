@@ -12,10 +12,10 @@
 //! this parser handles and the flags we deliberately do (and do not) pass.
 
 use crate::error::{AppError, AppResult};
+use crate::providers::cli_runner::CliProcess;
 use crate::providers::{ClaudeCodeRequest, StreamEvent};
 use serde::Deserialize;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
@@ -113,30 +113,18 @@ pub async fn stream_chat(
     }
 
     cmd.arg(&req.user_message);
+    // Claude Code reads the prompt from argv, not stdin — close stdin so it
+    // doesn't hang waiting for input that's never coming.
+    cmd.stdin(Stdio::null());
 
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| AppError::Upstream(format!("spawn claude: {e}")))?;
-
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| AppError::Other("claude stdout missing".into()))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| AppError::Other("claude stderr missing".into()))?;
+    let mut process = CliProcess::spawn(cmd, "claude")?;
 
     let mut input_tokens: Option<i64> = None;
     let mut output_tokens: Option<i64> = None;
     let mut terminal_error: Option<String> = None;
 
-    let mut reader = BufReader::new(stdout).lines();
-    while let Some(line) = reader
+    while let Some(line) = process
+        .lines
         .next_line()
         .await
         .map_err(|e| AppError::Upstream(format!("read claude stdout: {e}")))?
@@ -159,7 +147,7 @@ pub async fn stream_chat(
                     if let ContentDelta::Text { text } = delta {
                         if tx.send(StreamEvent::Delta(text)).await.is_err() {
                             // Consumer dropped; kill child and abandon.
-                            let _ = child.kill().await;
+                            process.kill().await;
                             return Ok(());
                         }
                     }
@@ -194,25 +182,7 @@ pub async fn stream_chat(
         }
     }
 
-    // Drain stderr (best effort, may carry installer / update prompts).
-    let stderr_text = read_to_string(stderr).await.unwrap_or_default();
-
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| AppError::Upstream(format!("wait claude: {e}")))?;
-
-    if let Some(msg) = terminal_error {
-        return Err(AppError::Upstream(msg));
-    }
-    if !status.success() {
-        let detail = if stderr_text.is_empty() {
-            format!("exit {status}")
-        } else {
-            format!("{status}: {}", stderr_text.trim())
-        };
-        return Err(AppError::Upstream(format!("claude code: {detail}")));
-    }
+    process.finish("claude code", terminal_error).await?;
 
     let _ = tx
         .send(StreamEvent::Usage {
@@ -222,21 +192,6 @@ pub async fn stream_chat(
         .await;
     let _ = tx.send(StreamEvent::Done).await;
     Ok(())
-}
-
-async fn read_to_string<R: tokio::io::AsyncRead + Unpin>(reader: R) -> std::io::Result<String> {
-    let mut s = String::new();
-    let mut r = BufReader::new(reader);
-    let mut line = String::new();
-    loop {
-        line.clear();
-        let n = r.read_line(&mut line).await?;
-        if n == 0 {
-            break;
-        }
-        s.push_str(&line);
-    }
-    Ok(s)
 }
 
 /// Lightweight install/auth check used by the frontend Settings dialog.

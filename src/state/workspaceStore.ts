@@ -7,6 +7,7 @@ import {
   type Workspace as IpcWorkspace,
 } from "../lib/ipc";
 import { autoLayout } from "../canvas/layout/autoLayout";
+import { getPreferredProvider } from "../lib/preferredProvider";
 import { useMessagesStore } from "./messagesStore";
 
 export type SessionId = string;
@@ -46,6 +47,8 @@ export interface Session {
    *  expanded preset, preExpand* hold the size to restore on collapse. */
   preExpandWidth: number | null;
   preExpandHeight: number | null;
+  /** Per-cell appearance override; null means "follow global Settings". */
+  appearanceOverride: "terminal" | "chat" | null;
 }
 
 export interface AddSessionInput {
@@ -90,6 +93,10 @@ function fromIpc(s: IpcSession): Session {
     positionLocked: s.positionLocked > 0,
     preExpandWidth: s.preExpandWidth,
     preExpandHeight: s.preExpandHeight,
+    appearanceOverride:
+      s.appearanceOverride === "terminal" || s.appearanceOverride === "chat"
+        ? s.appearanceOverride
+        : null,
   };
 }
 
@@ -125,11 +132,33 @@ interface WorkspaceState {
     parentId: SessionId,
     forkPointMessageId: string,
     position?: { x: number; y: number },
+    /** Optional override: fork into a different provider/model/transport.
+     *  When unset, inherits from the parent (same behaviour as before). The
+     *  cross-LLM fork picker uses this to spawn a Claude→GPT or Claude→Gemini
+     *  chain from one click. */
+    providerOverride?: {
+      providerId: string;
+      modelId: string;
+      transportId: TransportId;
+    },
   ) => Promise<SessionId>;
   fanOut: (
     parentSessionId: SessionId,
     anchorMessageId: string,
     count: number,
+  ) => Promise<SessionId[]>;
+  /** Spawn one fork per available provider, rebroadcasting the same prompt
+   *  to all of them. The "killer demo" — Claude + GPT + Gemini (+ Ollama)
+   *  responding to the same context in parallel, each tinted with its own
+   *  brand color on the canvas. Returns the new session ids. */
+  fanOutAcrossProviders: (
+    parentSessionId: SessionId,
+    anchorMessageId: string,
+    providers: ReadonlyArray<{
+      providerId: string;
+      modelId: string;
+      transportId: TransportId;
+    }>,
   ) => Promise<SessionId[]>;
   mergeSessions: (sourceSessionIds: SessionId[]) => Promise<SessionId>;
   updateSessionPosition: (id: SessionId, position: { x: number; y: number }) => void;
@@ -137,6 +166,21 @@ interface WorkspaceState {
   updateSessionSize: (id: SessionId, width: number, height: number) => void;
   updateSessionTitle: (id: SessionId, title: string) => Promise<void>;
   updateSessionModel: (id: SessionId, modelId: string) => Promise<void>;
+  /** Switch a session's provider (and optionally transport) along with model.
+   *  Used when the user picks a model from a different family in the per-cell
+   *  picker (e.g. Claude → GPT). Keeps DB writes atomic from the UI's POV. */
+  updateSessionProviderModel: (
+    id: SessionId,
+    providerId: string,
+    modelId: string,
+    transportId: TransportId,
+  ) => Promise<void>;
+  /** Set the per-session appearance override, or pass `null` to clear it
+   *  back to "follow global setting". */
+  updateSessionAppearance: (
+    id: SessionId,
+    override: "terminal" | "chat" | null,
+  ) => Promise<void>;
   /**
    * Toggle a session between its normal size and a generous expanded preset.
    * Backend stores the pre-expand size atomically, so collapse always returns
@@ -293,10 +337,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     addSession: async (init = {}) => {
+      // Respect explicit init values; otherwise fall back to the user's
+      // onboarding choice (stored in localStorage), then to Claude Code
+      // hard-defaults so this still works pre-onboarding.
+      const pref = getPreferredProvider();
       const created = await ipc.createSession({
-        providerId: init.providerId ?? "anthropic",
-        modelId: init.modelId ?? "claude-sonnet-4-6",
-        transportId: init.transportId ?? "claude-code",
+        providerId: init.providerId ?? pref?.providerId ?? "anthropic",
+        modelId: init.modelId ?? pref?.modelId ?? "claude-sonnet-4-6",
+        transportId: init.transportId ?? pref?.transportId ?? "claude-code",
         workspaceId: init.workspaceId ?? get().currentWorkspaceId,
         title: init.title,
         systemPrompt: init.systemPrompt,
@@ -311,7 +359,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       return created.id;
     },
 
-    forkSession: async (parentId, forkPointMessageId, position) => {
+    forkSession: async (parentId, forkPointMessageId, position, providerOverride) => {
       const parent = get().sessions[parentId];
       if (!parent) {
         throw new Error(`fork: parent session ${parentId} not in store`);
@@ -321,11 +369,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         y: parent.position.y + 60 + (Math.random() - 0.5) * 80,
       };
       const created = await ipc.createSession({
-        providerId: parent.providerId,
-        modelId: parent.modelId,
-        transportId: parent.transportId,
+        providerId: providerOverride?.providerId ?? parent.providerId,
+        modelId: providerOverride?.modelId ?? parent.modelId,
+        transportId: providerOverride?.transportId ?? parent.transportId,
         workspaceId: parent.workspaceId,
-        title: "fork",
+        title: providerOverride
+          ? `fork → ${providerOverride.providerId}`
+          : "fork",
         positionX: pos.x,
         positionY: pos.y,
         parentSessionId: parentId,
@@ -396,6 +446,82 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       for (const fork of created) {
         ipc.startStream(fork.id, promptText).catch((err) => {
           console.error(`fan-out broadcast to ${fork.id} failed`, err);
+        });
+      }
+
+      return created.map((c) => c.id);
+    },
+
+    fanOutAcrossProviders: async (parentSessionId, anchorMessageId, providers) => {
+      if (providers.length < 1) {
+        throw new Error("cross-provider fan-out needs at least 1 provider");
+      }
+
+      const parent = get().sessions[parentSessionId];
+      if (!parent) {
+        throw new Error(`fan-out: parent ${parentSessionId} not in store`);
+      }
+
+      const msgs = useMessagesStore.getState();
+      const ids = msgs.bySession[parentSessionId] ?? [];
+      const anchorIdx = ids.indexOf(anchorMessageId);
+      if (anchorIdx === -1) {
+        throw new Error("fan-out: anchor message not in session");
+      }
+
+      // Walk backwards from the anchor to find the most recent user message —
+      // that's the prompt we'll rebroadcast. Same logic as fanOut().
+      let userIdx = anchorIdx;
+      while (userIdx >= 0 && msgs.byId[ids[userIdx]]?.role !== "user") {
+        userIdx -= 1;
+      }
+      if (userIdx < 0) {
+        throw new Error("fan-out: no user message at or before anchor");
+      }
+
+      const userMessage = msgs.byId[ids[userIdx]];
+      if (!userMessage) throw new Error("fan-out: anchor user message missing");
+
+      const forkPointId = userIdx > 0 ? ids[userIdx - 1] : undefined;
+      const promptText = userMessage.content;
+
+      // Lay forks out in a vertical column to the right of the parent so the
+      // user sees them as a fan. Spacing matches single-provider fanOut.
+      const baseX = parent.position.x + 460;
+      const spacing = 520;
+      const count = providers.length;
+      const positions = providers.map((_, i) => ({
+        x: baseX,
+        y: parent.position.y + (i - (count - 1) / 2) * spacing,
+      }));
+
+      // Create all sessions in parallel — each in its own provider/model/transport.
+      const created = await Promise.all(
+        providers.map((p, i) =>
+          ipc.createSession({
+            providerId: p.providerId,
+            modelId: p.modelId,
+            transportId: p.transportId,
+            workspaceId: parent.workspaceId,
+            title: `fork → ${p.providerId}`,
+            positionX: positions[i].x,
+            positionY: positions[i].y,
+            parentSessionId,
+            forkPointMessageId: forkPointId,
+          }),
+        ),
+      );
+
+      set((state) => {
+        for (const c of created) state.sessions[c.id] = fromIpc(c);
+      });
+
+      // Kick off every stream in parallel. The backend dispatches per-session
+      // so each provider streams independently — Claude, GPT, Gemini, Ollama
+      // all racing on the canvas, each tinted with its own brand color.
+      for (const fork of created) {
+        ipc.startStream(fork.id, promptText).catch((err) => {
+          console.error(`cross-provider fan-out to ${fork.id} failed`, err);
         });
       }
 
@@ -555,6 +681,27 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (s) s.modelId = modelId;
       });
       await ipc.updateSession(id, { modelId });
+    },
+
+    updateSessionProviderModel: async (id, providerId, modelId, transportId) => {
+      set((state) => {
+        const s = state.sessions[id];
+        if (s) {
+          s.providerId = providerId;
+          s.modelId = modelId;
+          s.transportId = transportId;
+        }
+      });
+      await ipc.updateSession(id, { providerId, modelId, transportId });
+    },
+
+    updateSessionAppearance: async (id, override) => {
+      set((state) => {
+        const s = state.sessions[id];
+        if (s) s.appearanceOverride = override;
+      });
+      // Empty string is the sentinel the backend uses to clear back to NULL.
+      await ipc.updateSession(id, { appearanceOverride: override ?? "" });
     },
 
     toggleSessionExpanded: async (id) => {

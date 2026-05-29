@@ -1,26 +1,43 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0a0a0b;
-  --color-bg-elevated: #101013;
-  --color-border: #22222a;
-  --color-border-strong: #2e2e38;
-  --color-fg: #f5f5f7;
-  --color-fg-muted: #8a8a93;
-  --color-fg-subtle: #555560;
-  --color-accent-from: #7c5cff;
-  --color-accent-to: #5b8def;
+  /* Liquid glass — Apple HIG translucent surfaces over an aurora-lit
+     canvas. Cards live as semi-transparent layers with backdrop-blur so
+     the colored ambient light from below actually bleeds through them.
+     Tokens here are the *opaque* fallbacks; the live surfaces use
+     rgba/color-mix on top for the real glass effect.
+     ---
+     Dark mode = warm violet-tinted near-black with a vibrant lavender
+     accent. Light mode parity below. */
+  --color-bg: #131218;
+  --color-bg-elevated: #1d1c24;
+  --color-border: #2c2a36;
+  --color-border-strong: #3d3b48;
+  --color-fg: #f8f7fc;
+  --color-fg-muted: #a8a6b6;
+  --color-fg-subtle: #6c6a7c;
+  /* Accent — Apple's lavender-violet, brighter and more luminous than the
+     old Linear-violet so it pops through translucent surfaces. */
+  --color-accent-from: #a78bfa;
+  --color-accent-to: #f0abfc;
   --color-danger: #f59e0b;
-  --color-success: #22c55e;
+  --color-success: #34d399;
 
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Glass tokens — used directly by translucent surfaces. */
+  --glass-bg: rgba(36, 34, 46, 0.55);
+  --glass-bg-strong: rgba(36, 34, 46, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.14);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+
+  --font-sans: "Geist", -apple-system, "SF Pro Text", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", "Menlo", monospace;
 
-  --radius-card: 12px;
+  --radius-card: 18px;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: dark light;
 }
 
 html,
@@ -35,16 +52,96 @@ body,
   text-rendering: optimizeLegibility;
 }
 
-/* Light mode opt-in via [data-theme="light"] on <html>. */
+/* ----- aurora ambient light -------------------------------------- */
+/* Three layered radial gradients give the canvas warm "weather" — the
+   reason glass surfaces look like glass instead of plastic. The colors
+   are saturated but the alpha is low so the eye reads them as light
+   bleeding through, not solid blobs. Light + dark each get their own
+   palette tuned for the base. */
+.aurora {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(900px circle at 18% 22%, color-mix(in srgb, var(--color-accent-from) 22%, transparent), transparent 55%),
+    radial-gradient(820px circle at 82% 78%, color-mix(in srgb, var(--color-accent-to) 18%, transparent), transparent 60%),
+    radial-gradient(700px circle at 50% 60%, color-mix(in srgb, #60a5fa 14%, transparent), transparent 55%);
+}
+html[data-theme="light"] .aurora {
+  background:
+    radial-gradient(900px circle at 18% 22%, color-mix(in srgb, var(--color-accent-from) 16%, transparent), transparent 55%),
+    radial-gradient(820px circle at 82% 78%, color-mix(in srgb, var(--color-accent-to) 13%, transparent), transparent 60%),
+    radial-gradient(700px circle at 50% 60%, color-mix(in srgb, #60a5fa 10%, transparent), transparent 55%);
+}
+
+/* ----- glass utility ---------------------------------------------- */
+/* The single source of truth for translucent surfaces. Anything from a
+   top-bar pill to the cell card composes this. Tunable via CSS vars per
+   theme so dark/light parity is automatic. */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),
+    0 14px 40px -16px rgba(0, 0, 0, 0.35);
+}
+.glass-strong {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-highlight),
+    0 24px 64px -28px rgba(0, 0, 0, 0.55);
+}
+
+/* Light mode opt-in via [data-theme="light"] on <html>. Real Apple HIG
+   light: warm off-white canvas (not pure white) with crisp glass cards
+   that pick up the aurora colors from the background. Same translucent
+   architecture as dark, just with lighter base values. */
 html[data-theme="light"] {
   color-scheme: light;
-  --color-bg: #fafaf7;
-  --color-bg-elevated: #ffffff;
-  --color-border: #e7e7e3;
-  --color-border-strong: #d4d4cf;
-  --color-fg: #18181b;
-  --color-fg-muted: #6b6b73;
-  --color-fg-subtle: #a1a1a8;
+  --color-bg: #f5f3ee;
+  --color-bg-elevated: #fdfcf9;
+  --color-border: #d8d4ca;
+  --color-border-strong: #b0aaa0;
+  --color-fg: #15141a;
+  --color-fg-muted: #555161;
+  --color-fg-subtle: #8a8694;
+  --color-accent-from: #6650ed;
+  --color-accent-to: #c026d3;
+
+  --glass-bg: rgba(253, 252, 249, 0.65);
+  --glass-bg-strong: rgba(253, 252, 249, 0.85);
+  --glass-border: rgba(20, 18, 26, 0.08);
+  --glass-border-strong: rgba(20, 18, 26, 0.14);
+  --glass-highlight: rgba(255, 255, 255, 0.6);
+}
+
+/* Default to whatever the OS is set to when there's no explicit user
+   preference (no `data-theme` attribute yet). Applied here so cold launch
+   matches the system before lib/theme.ts has a chance to read storage. */
+@media (prefers-color-scheme: light) {
+  html:not([data-theme]) {
+    color-scheme: light;
+    --color-bg: #f5f3ee;
+    --color-bg-elevated: #fdfcf9;
+    --color-border: #d8d4ca;
+    --color-border-strong: #b0aaa0;
+    --color-fg: #15141a;
+    --color-fg-muted: #555161;
+    --color-fg-subtle: #8a8694;
+    --color-accent-from: #6650ed;
+    --color-accent-to: #c026d3;
+    --glass-bg: rgba(253, 252, 249, 0.65);
+    --glass-bg-strong: rgba(253, 252, 249, 0.85);
+    --glass-border: rgba(20, 18, 26, 0.08);
+    --glass-border-strong: rgba(20, 18, 26, 0.14);
+    --glass-highlight: rgba(255, 255, 255, 0.6);
+  }
 }
 
 :root {
@@ -108,6 +205,22 @@ html[data-theme="light"] {
   border-radius: 9999px !important;
 }
 
+/* xyflow paints its own selected-state ring on the *outer* node wrapper
+   via box-shadow. That wrapper has no border-radius, so the ring draws as
+   a hard rectangle around our rounded card and looks broken at the corners.
+   We paint our own selected style inside SessionNode's motion.div, so kill
+   the default here. */
+.react-flow__node {
+  box-shadow: none !important;
+  outline: none !important;
+}
+.react-flow__node.selected,
+.react-flow__node:focus,
+.react-flow__node:focus-visible {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
 /* NodeResizer chrome — handles and edge lines are always mounted (so the
    resize cursor is available immediately when the user hovers a session
    edge), but visually they fade in on node hover / selection so the canvas
@@ -157,18 +270,55 @@ html[data-theme="light"] {
 .typing-dots > span:nth-child(2) { animation-delay: 0.16s; }
 .typing-dots > span:nth-child(3) { animation-delay: 0.32s; }
 
+/* ----- invisible-until-hover scrollbar --------------------------- */
+/* The smart wheel handler in MessageList.tsx drives scrolling without the
+   user ever needing the bar. We hide it completely at rest (matches
+   macOS overlay behaviour even when the user has "Always show scroll bars"
+   in System Settings), and only reveal a thin pill while the container
+   is actively being hovered. */
+.chat-scroll {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+.chat-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.chat-scroll:hover {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-fg) 20%, transparent) transparent;
+}
+.chat-scroll:hover::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.chat-scroll:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-fg) 20%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.chat-scroll:hover::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-fg) 35%, transparent);
+  background-clip: padding-box;
+}
+
 /* ----- chat-mode appearance --------------------------------------- */
 /* In chat mode, the assistant body switches to sans-serif (Geist Sans)
    for that conversational ChatGPT/Claude.ai feel. Code blocks stay mono
    regardless because they inherit from <code>/<pre>'s own font-family
    declarations below. */
-html[data-appearance="chat"] .chat-md {
+.appearance-chat .chat-md {
   font-family: var(--font-sans);
 }
-html[data-appearance="chat"] .chat-md > * + * {
+.appearance-chat .chat-md > * + * {
   margin-top: 0.6rem;
 }
-html[data-appearance="chat"] .chat-md p {
+.appearance-chat .chat-md p {
   line-height: 1.6;
 }
 /* User-message bubble in chat mode. Styled via class so JSX layout

@@ -22,19 +22,26 @@ export function CrossGrid() {
 
   return (
     <>
+      {/* Aurora-lit ambient layer. Three radial gradients of the accent
+          palette so glass cards have actual color bleed-through. Doesn't
+          pan with the canvas — it's screen-fixed so the lighting feels
+          like environment rather than landscape. */}
+      <div aria-hidden className="aurora" />
       <Background
-        variant={BackgroundVariant.Cross}
-        gap={32}
-        size={6}
+        variant={BackgroundVariant.Dots}
+        gap={28}
+        size={1.4}
         color="var(--fork-grid-color)"
       />
+      {/* Cursor halo. Subtle accent tint so it reads as ambient
+          highlight, not a spotlight. */}
       <div
         ref={lightRef}
         aria-hidden
-        className="pointer-events-none fixed inset-0 z-0 transition-opacity"
+        className="pointer-events-none fixed inset-0 z-0"
         style={{
           background:
-            "radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--color-accent-from) 7%, transparent), transparent 55%)",
+            "radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--color-accent-from) 5%, transparent), transparent 60%)",
         }}
       />
     </>

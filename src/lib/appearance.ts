@@ -22,7 +22,17 @@ export function getInitialAppearance(): Appearance {
 
 export function applyAppearance(mode: Appearance) {
   if (typeof document !== "undefined") {
-    document.documentElement.dataset.appearance = mode;
+    // Two channels:
+    //   • `data-appearance` on <html> is the legacy/global flag (still read
+    //     by a few places).
+    //   • `appearance-chat` / `appearance-terminal` class so CSS rules can
+    //     scope to *any* ancestor — that's what lets a per-session override
+    //     wrapper switch a single cell to a different mode without changing
+    //     the rest of the canvas.
+    const el = document.documentElement;
+    el.dataset.appearance = mode;
+    el.classList.remove("appearance-chat", "appearance-terminal");
+    el.classList.add(`appearance-${mode}`);
   }
   if (typeof window !== "undefined") {
     window.localStorage.setItem(STORAGE_KEY, mode);
