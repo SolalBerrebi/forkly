@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Forkly — Design Directions</title>
+<style>
+  @import url("https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/index.css");
+  @import url("https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.18/index.css");
+
+  :root {
+    --bg: #0c0b10;
+    --bg-elevated: #16151c;
+    --border: #2a2933;
+    --fg: #f4f3f7;
+    --fg-muted: #a3a1ad;
+    --fg-subtle: #6e6b78;
+    --accent: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100vh; }
+  body {
+    background:
+      radial-gradient(800px circle at 25% 15%, rgba(167,139,250,0.10), transparent 55%),
+      radial-gradient(700px circle at 80% 85%, rgba(240,171,252,0.08), transparent 60%),
+      var(--bg);
+    color: var(--fg);
+    font-family: "Inter", system-ui, sans-serif;
+    padding: 60px 40px 80px;
+    font-feature-settings: "ss01";
+    letter-spacing: -0.005em;
+  }
+
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header { margin-bottom: 50px; }
+  h1 {
+    font-size: 38px; font-weight: 600; margin: 0 0 12px;
+    letter-spacing: -0.025em;
+  }
+  .sub {
+    color: var(--fg-muted); font-size: 16px; line-height: 1.55;
+    max-width: 640px;
+  }
+  .grid {
+    display: grid; gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+  }
+  .card {
+    display: flex; flex-direction: column;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    text-decoration: none; color: inherit;
+    transition: all .22s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 20px 50px -25px rgba(0,0,0,0.5);
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent);
+    box-shadow:
+      0 0 0 1px var(--accent),
+      0 0 70px -15px rgba(167,139,250,0.4),
+      0 28px 60px -25px rgba(0,0,0,0.55);
+  }
+  .preview {
+    aspect-ratio: 16/10;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+  .preview iframe {
+    border: none;
+    width: 200%;
+    height: 200%;
+    transform: scale(0.5);
+    transform-origin: top left;
+    pointer-events: none;
+  }
+  .card-body {
+    padding: 22px;
+    border-top: 1px solid var(--border);
+  }
+  .card-tag {
+    display: inline-block;
+    font: 500 10px/1 "JetBrains Mono", ui-monospace, monospace;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--accent);
+    background: rgba(167,139,250,0.12);
+    border: 1px solid rgba(167,139,250,0.3);
+    padding: 4px 8px;
+    border-radius: 5px;
+    margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 19px; font-weight: 600; letter-spacing: -0.015em;
+    margin: 0 0 8px;
+  }
+  .card-desc {
+    color: var(--fg-muted); font-size: 13.5px; line-height: 1.55;
+    margin: 0 0 16px;
+  }
+  .card-meta {
+    display: flex; gap: 16px;
+    font: 500 11px/1 "JetBrains Mono", ui-monospace, monospace;
+    color: var(--fg-subtle);
+  }
+  .card-meta span b { color: var(--fg-muted); font-weight: 500; }
+
+  .legend {
+    margin-top: 50px;
+    padding: 24px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--fg-muted);
+    font-size: 13.5px; line-height: 1.65;
+  }
+  .legend b { color: var(--fg); font-weight: 600; }
+  .legend code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.88em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Forkly — pick a direction</h1>
+    <p class="sub">
+      Four design directions for the spatial canvas. Each shows the same
+      scene (a Claude session forking into GPT and Gemini) so the only
+      variable is taste. Click any tile to open it full-screen and play
+      with hover/focus states. Reply with the one you want and I'll port
+      the tokens, components, and micro-interactions into the live app.
+    </p>
+  </header>
+
+  <div class="grid">
+    <a class="card" href="01-linear.html" target="_blank">
+      <div class="preview"><iframe src="01-linear.html"></iframe></div>
+      <div class="card-body">
+        <span class="card-tag">Direction 01</span>
+        <h2 class="card-title">Linear · Raycast</h2>
+        <p class="card-desc">
+          Refined dev-tool. Dark, dense, deliberate. Geist-everywhere
+          typography. Subtle violet on selection and streaming only.
+          Reads as "built by devs who care, for devs who care."
+        </p>
+        <div class="card-meta">
+          <span>mood <b>dark · sharp</b></span>
+          <span>radius <b>14px</b></span>
+          <span>type <b>Geist</b></span>
+        </div>
+      </div>
+    </a>
+
+    <a class="card" href="02-apple.html" target="_blank">
+      <div class="preview"><iframe src="02-apple.html"></iframe></div>
+      <div class="card-body">
+        <span class="card-tag">Direction 02</span>
+        <h2 class="card-title">Apple HIG · Liquid Glass</h2>
+        <p class="card-desc">
+          Premium consumer feel. Translucent surfaces with backdrop blur,
+          generous corners, warm dark base, soft vibrant accents. Inter
+          + JetBrains Mono. Reads as "premium tool worth paying for."
+        </p>
+        <div class="card-meta">
+          <span>mood <b>warm · glass</b></span>
+          <span>radius <b>22px</b></span>
+          <span>type <b>Inter</b></span>
+        </div>
+      </div>
+    </a>
+
+    <a class="card" href="03-figma.html" target="_blank">
+      <div class="preview"><iframe src="03-figma.html"></iframe></div>
+      <div class="card-body">
+        <span class="card-tag">Direction 03</span>
+        <h2 class="card-title">Figma · Canvas-first</h2>
+        <p class="card-desc">
+          Playful and spatial. Provider colors are loud and proud (full-
+          color headers), bigger cells, friendlier proportions. The
+          canvas IS the product. Reads as "build a thinking artifact."
+        </p>
+        <div class="card-meta">
+          <span>mood <b>playful · bold</b></span>
+          <span>radius <b>16px</b></span>
+          <span>type <b>Inter</b></span>
+        </div>
+      </div>
+    </a>
+
+    <a class="card" href="04-editorial.html" target="_blank">
+      <div class="preview"><iframe src="04-editorial.html"></iframe></div>
+      <div class="card-body">
+        <span class="card-tag">Direction 04</span>
+        <h2 class="card-title">Editorial · Paper</h2>
+        <p class="card-desc">
+          Calm, premium, light-first. Off-white surfaces, hairline borders,
+          Fraunces serif for titles, JetBrains Mono for code. Inspired by
+          Are.na and NYT Cooking. Reads as "thoughtful tool for thoughtful
+          people." Doubles as the strongest light-mode reference.
+        </p>
+        <div class="card-meta">
+          <span>mood <b>light · calm</b></span>
+          <span>radius <b>14px</b></span>
+          <span>type <b>Fraunces + Inter</b></span>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <div class="legend">
+    <p><b>How to choose:</b> open each one full-screen. Hover the cards on
+    the canvas to see selection / hover states. Look at the lineage edge
+    between Claude and the streaming GPT cell — that's where each
+    direction differs most. The composer and chrome are the second
+    decisive comparison.</p>
+
+    <p style="margin-top: 12px;">When you reply, just say <code>direction 02</code> (or whichever)
+    and I'll port the design tokens, micro-interactions, and component
+    decisions into the real app. We can also mix — e.g. <code>02 with 04's
+    typography</code>.</p>
+  </div>
+</div>
+</body>
+</html>

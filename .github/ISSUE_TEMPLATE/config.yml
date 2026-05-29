@@ -1,0 +1,8 @@
+# Force users into one of the structured templates so we don't get bare
+# bug reports without reproduction steps. The "blank issue" path is still
+# available via the templates list but with a friendly nudge.
+blank_issues_enabled: true
+contact_links:
+  - name: Discussion / question
+    url: https://github.com/SolalBerrebi/forkly/discussions
+    about: For open-ended questions, design ideas, or anything that isn't a concrete bug or feature request.

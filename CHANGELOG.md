@@ -4,30 +4,58 @@ All notable changes to Forkly. The format roughly follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
-### Added
+### Added — M8: Multi-provider integration
 
-- **Subscription-backed chat via Claude Code** — Forkly's primary auth path. Detects `claude` on PATH, surfaces install/login instructions if missing. Streams via `claude --print --verbose --output-format stream-json --include-partial-messages`; multi-turn conversations use `--session-id` on the first turn and `--resume` thereafter.
-- **Direct Anthropic API key transport** as an advanced fallback for power users / orgs that don't use Claude Code. API keys live in the OS keychain via the `keyring` crate.
-- **Visual canvas with infinite pan/zoom** powered by xyflow, custom cross-dot grid background, and a cursor-tracking violet highlight.
-- **Forking** — hover any message, click "fork" or press `2`–`9` for fan-out. Forks inherit parent context (replayed as a prelude on the first turn for Claude Code, sent natively as `messages[]` for the API transport).
+- **OpenAI provider** — both transports:
+  - `codex exec --json` CLI for ChatGPT Plus / Pro / Business subscription auth (no API key needed)
+  - `/v1/chat/completions` HTTP for the API tier
+- **Google Gemini provider** via `streamGenerateContent` (API key). Gemini CLI deliberately skipped — it's being deprecated for free / personal tiers on 2026-06-18.
+- **Ollama local provider** via `localhost:11434/api/chat`. Models are dynamically populated from `ollama list` on the user's machine; no hardcoded catalog.
+- **Cross-LLM fork picker** — clicking the fork button on any message opens a small popover listing every provider you have configured. Pick one and the fork inherits the parent's history but runs on a different model. The composer has a matching always-visible "fork ⇢" button that forks from the latest message.
+- **First-launch onboarding** detects Claude Code, Codex CLI, and Ollama; offers a Gemini AI Studio walkthrough as the universal fallback so new users land in a working state within 60 seconds without an API key. No keys are ever shipped in the binary.
+- **Per-cell provider switching** — the model picker on each cell now lists every provider's catalog (Claude amber, GPT green, Gemini blue, Ollama pink), and switching providers auto-picks the cheapest available transport (subscription CLI when logged in, API otherwise).
+
+### Added — M7: Per-cell polish
+
+- **Per-cell info chips** in each session header: token totals, turn count, last activity, current git branch when the working dir is a repo.
+- **Resizable cells** via xyflow's `NodeResizer`, with min/max bounds and debounced persistence.
+- **Dagre auto-layout** (`⌘⇧L`) — reorganizes unlocked cells into a clean left-to-right tree. Cells you've manually dragged stay where they are.
+- **Network log drawer** (`⌘⇧N`) — every outbound call (CLI subprocess invocations or HTTP requests) lands here with method, status, duration, token totals, and a raw-detail expansion for debugging upstream schema changes. Local-only, capped at 500 entries.
+- **Live-linked Claude Code session import** — Forkly's session id is the underlying CC session UUID, so `claude --resume` continues the same `.jsonl` file on disk. Adding turns in Forkly grows the original file.
+- **Per-cell appearance toggle** — flip a single cell between Claude-Code-terminal feel (mono, `›` prefix, blinking caret) and chat feel (sans-serif bubbles) without affecting other cells on the canvas.
+- **Cell expand / collapse** preset, persisted across launches.
+
+### Added — UI polish pass
+
+- **Liquid-glass surfaces** — every chrome element (top bar, cells, composer, dialogs, drawer, popovers) is translucent with 20–24px backdrop blur over an aurora-lit canvas, so colored ambient light bleeds through. Light + dark have parity tokens; the OS color scheme is the default and the theme toggle is for explicit overrides.
+- **Click-to-focus** any off-center cell smoothly slides the viewport to centre it at the current zoom.
+- **Smart wheel handler** — pinch zooms the canvas, scroll past the top/bottom of a message list pans the canvas, scroll mid-list scrolls the list.
+
+### Added — initial release (pre-M8)
+
+- **Subscription-backed chat via Claude Code** — Forkly's primary auth path. Detects `claude` on PATH, surfaces install/login instructions if missing.
+- **Direct Anthropic API key transport** as an advanced fallback. API keys live in the OS keychain via the `keyring` crate.
+- **Visual canvas with infinite pan/zoom** powered by xyflow.
+- **Forking** — hover any message, click "fork" or press `2`–`9` for fan-out. Forks inherit parent context (replayed as a prelude on the first turn for Claude Code, sent natively as `messages[]` for the API transports).
 - **Merge nodes** — select 2+ sibling forks, press `M`. A new node fans in with edges from every source and auto-streams a synthesis prompt built from each source's final response.
 - **Auto-titling** — after the first reply, a cheap Haiku call titles the session (≤4 words, lowercased).
-- **Zoom-dependent node rendering** — full chat (zoom ≥ 0.7), compact card with last user/assistant preview (0.35–0.7), or label-only at far zoom.
-- **Workspaces** (pages / sheets) — create named canvases; each one is an independent set of sessions. Persistent across launches.
-- **Delete sessions** via `Delete` / `Backspace` key on selection, or the "..." menu on each node header. Confirms first; cascades messages but orphans descendants so forks survive.
-- **Settings dialog** with Claude Code status detection and per-provider API key management.
-- **Light & dark themes**, persisted to localStorage.
+- **Zoom-dependent node rendering** — full chat at normal zoom, label-only when zoomed out far.
+- **Workspaces** (pages / sheets).
+- **Delete sessions** with confirmation, cascading messages but orphaning descendants so forks survive.
+- **Settings dialog** with status detection for every transport.
 
 ### Known limitations
 
 - No automatic crash recovery for mid-stream interruptions yet (the partial response is saved but the stream doesn't auto-resume).
 - API-only users (no Claude Code installed) don't get auto-titling, since the titling call uses the `claude` CLI for cheap inference.
 - The first launch on a fresh install doesn't ship a demo workspace yet.
+- macOS builds are not signed yet; running from a downloaded `.dmg` will require right-click → Open until v0.1.0.
 
 ### Internals
 
 - SQLite-backed workspace persists across launches; migrations live in `src-tauri/migrations/`.
-- Streaming is event-based via Tauri's `emit` system (`stream:start` / `stream:delta` / `stream:done` / `stream:error`) so concurrent streams across multiple nodes work natively.
+- Streaming is event-based via Tauri's `emit` system (`stream:start` / `stream:delta` / `stream:done` / `stream:error` / `session:stats` / `net-log:entry`) so concurrent streams across multiple nodes work natively.
+- Shared `providers/cli_runner.rs` wraps subprocess plumbing for Claude Code and Codex. Each provider owns its NDJSON parser; the I/O is uniform.
 - Frontend state: Zustand + Immer; messages and workspaces are separate stores wired via a thin stream-event bridge.
 
-[Unreleased]: https://github.com/forkly/forkly/compare/v0.0.0...HEAD
+[Unreleased]: https://github.com/SolalBerrebi/forkly/compare/v0.0.0...HEAD

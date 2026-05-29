@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Forkly — Direction 02 · Apple HIG / Liquid Glass</title>
+<style>
+  /* ============== Design 02 ==============================================
+     Direction: Apple HIG / liquid glass — premium consumer feel.
+     Mood: translucent surfaces with backdrop blur, generous corner radii
+     (18–22px), warm dark base with soft vibrant accents. SF-like
+     typography. Stronger ambient light, softer shadows. Reads as
+     "premium tool worth paying for, even though it's free."
+     ====================================================================== */
+  @import url("https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/index.css");
+  @import url("https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.18/index.css");
+
+  :root {
+    --bg: #131218;
+    --bg-elevated: rgba(36, 34, 46, 0.72);
+    --bg-soft: rgba(50, 48, 62, 0.6);
+    --border: rgba(255,255,255,0.07);
+    --border-strong: rgba(255,255,255,0.13);
+    --fg: #f8f7fc;
+    --fg-muted: rgba(248,247,252,0.66);
+    --fg-subtle: rgba(248,247,252,0.4);
+    --accent: #a78bfa;
+    --accent-warm: #f0abfc;
+    --claude: #f7976a;
+    --gpt: #34d399;
+    --gemini: #60a5fa;
+    --font-sans: "Inter", -apple-system, "SF Pro Text", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  /* Canvas with aurora-style ambient light */
+  .canvas {
+    position: relative;
+    width: 100vw; height: 100vh;
+    background:
+      radial-gradient(900px circle at 18% 20%, rgba(167,139,250,0.18), transparent 55%),
+      radial-gradient(800px circle at 82% 78%, rgba(240,171,252,0.14), transparent 60%),
+      radial-gradient(700px circle at 50% 60%, rgba(96,165,250,0.10), transparent 55%),
+      #0f0e15;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(ellipse 80% 70% at center, black 60%, transparent 95%);
+  }
+
+  /* ============== Top bar (floating glass) ============================= */
+  .topbar {
+    position: absolute; inset: 16px 16px auto 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .topbar > * { pointer-events: auto; }
+  .glass {
+    background: rgba(36, 34, 46, 0.55);
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255,255,255,0.06),
+      0 14px 40px -16px rgba(0,0,0,0.4);
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 9px;
+    height: 36px; padding: 0 14px;
+    border-radius: 14px;
+    font: 500 13px/1 var(--font-sans);
+    letter-spacing: -0.005em;
+  }
+  .logo-mark {
+    width: 22px; height: 22px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-warm) 100%);
+    border-radius: 7px;
+    box-shadow: 0 4px 10px -3px rgba(167,139,250,0.5);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: white;
+  }
+  .logo-mark svg { width: 14px; height: 14px; }
+  .ws-switcher {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 36px; padding: 0 14px;
+    border-radius: 14px;
+    font: 500 13px/1 var(--font-sans);
+    color: var(--fg-muted);
+  }
+  .chrome-group {
+    display: inline-flex; align-items: center; gap: 2px;
+    height: 36px; padding: 3px;
+    border-radius: 14px;
+  }
+  .icon-btn {
+    width: 30px; height: 30px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent; color: var(--fg-muted);
+    border-radius: 10px; cursor: pointer;
+    transition: background .18s ease, color .18s ease, transform .18s ease;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,0.08); color: var(--fg); transform: translateY(-1px); }
+  .icon-btn svg { width: 15px; height: 15px; }
+  .new-session {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 36px; padding: 0 16px;
+    background: linear-gradient(180deg, rgba(167,139,250,0.95), rgba(167,139,250,0.7));
+    border: none;
+    border-radius: 14px;
+    color: white; font: 600 13px/1 var(--font-sans);
+    cursor: pointer;
+    letter-spacing: -0.005em;
+    box-shadow:
+      inset 0 1px 0 0 rgba(255,255,255,0.3),
+      0 6px 18px -5px rgba(167,139,250,0.55);
+    transition: all .18s ease;
+  }
+  .new-session:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.4), 0 10px 24px -6px rgba(167,139,250,0.7); }
+  .right-cluster { display: flex; gap: 10px; align-items: center; }
+
+  /* ============== Cells ================================================ */
+  .cells { position: absolute; inset: 0; }
+  .cell {
+    position: absolute;
+    background: rgba(28, 26, 36, 0.7);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 22px;
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255,255,255,0.05),
+      0 1px 1px 0 rgba(255,255,255,0.02),
+      0 30px 80px -32px rgba(0,0,0,0.7),
+      0 4px 16px -6px rgba(0,0,0,0.35);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .cell:hover { transform: translateY(-2px); box-shadow:
+      inset 0 1px 0 0 rgba(255,255,255,0.06),
+      0 40px 90px -32px rgba(0,0,0,0.75); }
+  .cell.selected {
+    border-color: var(--accent);
+    box-shadow:
+      inset 0 1px 0 0 rgba(167,139,250,0.15),
+      0 0 0 4px rgba(167,139,250,0.16),
+      0 0 60px -5px rgba(167,139,250,0.4),
+      0 30px 80px -32px rgba(0,0,0,0.7);
+  }
+  .cell-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .provider-pill {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 9px;
+    box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.15);
+  }
+  .provider-pill svg { width: 14px; height: 14px; }
+  .cell-title { flex: 1; font: 600 14px/1 var(--font-sans); color: var(--fg); letter-spacing: -0.01em; }
+  .model-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font: 500 11px/1 var(--font-sans);
+    letter-spacing: -0.005em;
+  }
+  .model-chip .dot { width: 6px; height: 6px; border-radius: 999px; }
+  .model-chip .dot.streaming { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .5; transform: scale(.8); }
+  }
+  .info-strip {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font: 500 11px/1 var(--font-sans);
+    color: var(--fg-subtle);
+  }
+  .info-strip .val { color: var(--fg-muted); }
+  .info-strip .sep { color: rgba(255,255,255,0.13); }
+
+  /* ============== Cell variants ======================================== */
+  .cell.claude .provider-pill { background: linear-gradient(135deg, var(--claude), color-mix(in srgb, var(--claude) 70%, white)); color: white; }
+  .cell.claude .model-chip { background: rgba(247,151,106,0.15); color: var(--claude); }
+  .cell.gpt .provider-pill { background: linear-gradient(135deg, var(--gpt), color-mix(in srgb, var(--gpt) 60%, white)); color: white; }
+  .cell.gpt .model-chip { background: rgba(52,211,153,0.15); color: var(--gpt); }
+  .cell.gemini .provider-pill { background: linear-gradient(135deg, var(--gemini), color-mix(in srgb, var(--gemini) 70%, white)); color: white; }
+  .cell.gemini .model-chip { background: rgba(96,165,250,0.15); color: var(--gemini); }
+
+  /* ============== Conversation body ==================================== */
+  .messages {
+    flex: 1; padding: 18px 16px;
+    display: flex; flex-direction: column; gap: 18px;
+    overflow: hidden;
+  }
+  .msg-row { display: flex; flex-direction: column; gap: 6px; }
+  .msg-row.user { align-items: flex-end; }
+  .msg-label {
+    font: 500 11px/1 var(--font-sans);
+    color: var(--fg-subtle);
+    letter-spacing: -0.005em;
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%;
+  }
+  .msg-row.user .msg-label { justify-content: flex-end; gap: 8px; }
+  .fork-button {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 22px; padding: 0 9px;
+    border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
+    border-radius: 7px;
+    color: var(--fg-muted);
+    font: 500 10px/1 var(--font-sans);
+    cursor: pointer;
+    transition: all .18s ease;
+    backdrop-filter: blur(8px);
+  }
+  .fork-button:hover { border-color: var(--accent); color: var(--accent); background: rgba(167,139,250,0.12); }
+  .fork-button svg { width: 11px; height: 11px; }
+  .msg-bubble-user {
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 9px 14px;
+    max-width: 78%;
+    font: 14px/1.5 var(--font-sans);
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  .msg-body-assistant {
+    font: 14px/1.55 var(--font-sans);
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  .msg-body-assistant code {
+    background: rgba(255,255,255,0.06);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+  }
+
+  /* ============== Composer ============================================= */
+  .composer {
+    padding: 14px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .composer-input {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    background: rgba(255,255,255,0.04);
+    box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04);
+    transition: all .2s ease;
+  }
+  .composer-input:focus-within {
+    border-color: var(--accent);
+    background: rgba(255,255,255,0.06);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255,255,255,0.05),
+      0 0 0 4px rgba(167,139,250,0.18);
+  }
+  .composer-input input {
+    flex: 1; border: none; outline: none; background: transparent;
+    color: var(--fg);
+    font: 14px/1.4 var(--font-sans);
+    letter-spacing: -0.005em;
+  }
+  .composer-input input::placeholder { color: var(--fg-subtle); }
+  .send-btn {
+    width: 30px; height: 30px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none;
+    background: linear-gradient(180deg, rgba(167,139,250,0.9), rgba(167,139,250,0.6));
+    color: white;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px -3px rgba(167,139,250,0.45);
+    transition: all .18s ease;
+  }
+  .send-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -3px rgba(167,139,250,0.6); }
+  .send-btn svg { width: 14px; height: 14px; }
+  .composer-footer {
+    margin-top: 10px; padding: 0 4px;
+    display: flex; justify-content: space-between; align-items: center;
+    font: 500 11px/1 var(--font-sans); color: var(--fg-subtle);
+  }
+  .kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 5px;
+    border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
+    border-radius: 5px; color: var(--fg-muted);
+    font: 500 10px/1 var(--font-mono);
+  }
+  .composer-footer .fork-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 11px;
+    border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
+    border-radius: 9px;
+    color: var(--fg-muted);
+    font: 500 11px/1 var(--font-sans);
+    cursor: pointer;
+    transition: all .18s ease;
+    backdrop-filter: blur(8px);
+  }
+  .composer-footer .fork-cta:hover {
+    border-color: var(--accent); background: rgba(167,139,250,0.12);
+    color: var(--accent);
+  }
+  .composer-footer .fork-cta svg { width: 12px; height: 12px; }
+
+  /* ============== Lineage edges (SVG) ================================== */
+  .edges { position: absolute; inset: 0; pointer-events: none; }
+
+  /* ============== Credit =============================================== */
+  .credit {
+    position: absolute; bottom: 18px; left: 18px;
+    font: 500 11px/1 var(--font-sans); color: var(--fg-subtle);
+    background: rgba(36, 34, 46, 0.6);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 8px 12px;
+    z-index: 10;
+    letter-spacing: -0.005em;
+  }
+  .credit b { color: var(--fg); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="grid"></div>
+
+  <!-- =================== Top bar =================== -->
+  <div class="topbar">
+    <div style="display:flex; gap:10px; align-items:center;">
+      <div class="pill glass">
+        <div class="logo-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>
+        </div>
+        Forkly
+        <span style="color:var(--fg-subtle); font-size:11px; margin-left: 2px;">0.1</span>
+      </div>
+      <div class="pill glass ws-switcher">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/></svg>
+        test workspace
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="right-cluster">
+      <div class="chrome-group glass">
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></button>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
+      </div>
+      <div class="chrome-group glass">
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></button>
+      </div>
+      <button class="pill glass" style="cursor:pointer; color: var(--fg-muted);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Import</button>
+      <button class="new-session">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        New session
+      </button>
+    </div>
+  </div>
+
+  <!-- =================== Lineage edges =================== -->
+  <svg class="edges" width="100%" height="100%">
+    <defs>
+      <linearGradient id="lineage-grad-2" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#a78bfa" stop-opacity="0.65"/>
+        <stop offset="1" stop-color="#f0abfc" stop-opacity="0.55"/>
+      </linearGradient>
+      <linearGradient id="lineage-grad-stream-2" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#a78bfa" stop-opacity="0.95"/>
+        <stop offset="1" stop-color="#f0abfc" stop-opacity="0.95"/>
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="3" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <path d="M 495 380 C 600 380 600 240 720 240" stroke="url(#lineage-grad-stream-2)" stroke-width="2" fill="none" stroke-dasharray="7 5" filter="url(#glow)">
+      <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="1.3s" repeatCount="indefinite"/>
+    </path>
+    <path d="M 495 490 C 620 490 620 620 740 620" stroke="url(#lineage-grad-2)" stroke-width="1.6" fill="none"/>
+  </svg>
+
+  <!-- =================== Cells =================== -->
+  <div class="cells">
+    <!-- Claude (parent, selected) -->
+    <div class="cell claude selected" style="left:90px; top:130px; width:410px; height:540px;">
+      <div class="cell-header">
+        <div class="provider-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>
+        </div>
+        <div class="cell-title">Initial greeting</div>
+        <div class="model-chip"><span class="dot" style="background:var(--claude)"></span>Sonnet 4.6</div>
+      </div>
+      <div class="info-strip">
+        <span>1.2k › 480 tok</span>
+        <span class="sep">·</span>
+        <span class="val">4 turns</span>
+        <span class="sep">·</span>
+        <span class="val">12s ago</span>
+        <span class="sep">·</span>
+        <span class="val">⎇ main</span>
+      </div>
+      <div class="messages">
+        <div class="msg-row user">
+          <div class="msg-label"><span>You</span><button class="fork-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>fork</button></div>
+          <div class="msg-bubble-user">Explain Forkly's spatial canvas in one paragraph.</div>
+        </div>
+        <div class="msg-row">
+          <div class="msg-label"><span>Sonnet 4.6</span><button class="fork-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>fork</button></div>
+          <div class="msg-body-assistant">Forkly turns linear LLM conversations into a <code>spatial canvas</code> where each session is a node and every reply can branch into a parallel exploration. Fork from any message to compare prompts, swap models, or explore alternative directions — all rendered as glowing lineage threads.</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="composer-input">
+          <input placeholder="Message Forkly…" />
+          <button class="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 7-7 7 7M12 19V5"/></svg></button>
+        </div>
+        <div class="composer-footer">
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span class="kbd">↵</span><span>send</span>
+            <span style="opacity: 0.5;">·</span>
+            <span class="kbd">⇧↵</span><span>newline</span>
+          </div>
+          <button class="fork-cta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>
+            Fork conversation ⇢
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GPT (streaming) -->
+    <div class="cell gpt" style="left:720px; top:160px; width:400px; height:350px;">
+      <div class="cell-header">
+        <div class="provider-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>
+        </div>
+        <div class="cell-title">Fork → OpenAI</div>
+        <div class="model-chip"><span class="dot streaming" style="background:var(--gpt)"></span>GPT-5.4</div>
+      </div>
+      <div class="info-strip">
+        <span>23k › 119 tok</span>
+        <span class="sep">·</span>
+        <span class="val">2 turns</span>
+        <span class="sep">·</span>
+        <span class="val">now</span>
+      </div>
+      <div class="messages">
+        <div class="msg-row user">
+          <div class="msg-label" style="justify-content: flex-end;"><span>You</span></div>
+          <div class="msg-bubble-user">Same question, with your spin.</div>
+        </div>
+        <div class="msg-row">
+          <div class="msg-label"><span>GPT-5.4</span></div>
+          <div class="msg-body-assistant">Think of Forkly as Figma for prompts: instead of a linear chat, you get a board where every interesting answer becomes a node you can branch from. Run the same context through Claude, then GPT, then Gemini — side by side<span style="color: var(--accent); animation: blink 1s infinite; margin-left: 2px;">▍</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gemini -->
+    <div class="cell gemini" style="left:740px; top:540px; width:380px; height:260px;">
+      <div class="cell-header">
+        <div class="provider-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>
+        </div>
+        <div class="cell-title">Fork → Google</div>
+        <div class="model-chip"><span class="dot" style="background:var(--gemini)"></span>Gemini 2.5 Flash</div>
+      </div>
+      <div class="info-strip">
+        <span>1.4k › 92 tok</span>
+        <span class="sep">·</span>
+        <span class="val">2 turns</span>
+        <span class="sep">·</span>
+        <span class="val">3m ago</span>
+      </div>
+      <div class="messages">
+        <div class="msg-row">
+          <div class="msg-label"><span>Gemini 2.5 Flash</span></div>
+          <div class="msg-body-assistant">Forkly maps a conversation tree onto an infinite canvas. Each cell is a session; lineage threads show which forks share context. Hit fork on any message, pick a different model, and the same question gets answered three ways at once.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="credit">Forkly · direction 02 — <b>Apple HIG · Liquid Glass</b></div>
+</div>
+<style>
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+</style>
+</body>
+</html>

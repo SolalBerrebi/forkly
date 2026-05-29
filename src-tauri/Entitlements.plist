@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened runtime entitlements for Forkly.
+         Notarization requires hardened runtime + a tightly-scoped set of
+         entitlements. We grant only what's needed to make WebKit + Tauri's
+         IPC + the keychain + outbound HTTPS work. -->
+
+    <!-- WebKit's JavaScript engine JITs hot paths; without this the
+         WebView crashes on launch under hardened runtime. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Tauri's webview process needs to allocate executable memory pages
+         for the JIT compiler (separate entitlement from `allow-jit`). -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Forkly spawns subprocesses for the Claude Code / Codex CLI
+         transports. Without this, the hardened runtime blocks exec(). -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- macOS security framework: read/write to the user's keychain so
+         we can store API keys via the `keyring` crate. -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)dev.forkly.app</string>
+    </array>
+
+    <!-- Outbound network connections to LLM providers (Anthropic,
+         OpenAI, Google, Ollama localhost). -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- File-read access to the user's home for importing existing
+         Claude Code sessions from ~/.claude/projects/. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+</dict>
+</plist>

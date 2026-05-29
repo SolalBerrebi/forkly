@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Forkly — Direction 01 · Linear / Raycast</title>
+<style>
+  /* ============== Design 01 ==============================================
+     Direction: Linear / Raycast — refined dev-tool.
+     Mood: dark, dense, deliberate. Geist-everywhere typography. Subtle
+     gradients on chrome only; cards are flat-with-shadow. Accent stays
+     restrained to selection + streaming states. Reads as "built by devs
+     who care, for devs who care."
+     ====================================================================== */
+  @import url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/index.css");
+  @import url("https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.0.3/index.css");
+
+  :root {
+    --bg: #0d0d10;
+    --bg-elevated: #16161c;
+    --bg-soft: #1c1c24;
+    --border: #2a2a35;
+    --border-strong: #3a3a48;
+    --fg: #f4f4f6;
+    --fg-muted: #a3a3ad;
+    --fg-subtle: #6b6b76;
+    --accent: #7c5cff;
+    --accent-to: #5b8def;
+    --claude: #d97757;
+    --gpt: #10a37f;
+    --gemini: #4285f4;
+    --grid: rgba(255,255,255,0.035);
+    --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+  /* Canvas grid */
+  .canvas {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background:
+      radial-gradient(700px circle at 30% 40%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%),
+      var(--bg);
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: radial-gradient(ellipse 80% 70% at center, black 60%, transparent 95%);
+  }
+
+  /* ============== Top bar ============================================== */
+  .topbar {
+    position: absolute; inset: 12px 12px auto 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .topbar > * { pointer-events: auto; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 32px; padding: 0 12px;
+    background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: 500 12px/1 var(--font-mono);
+    backdrop-filter: blur(12px);
+  }
+  .logo-dot {
+    width: 8px; height: 8px; border-radius: 2px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-to));
+  }
+  .chrome-group {
+    display: inline-flex; align-items: center; gap: 2px;
+    height: 32px; padding: 2px;
+    background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    backdrop-filter: blur(12px);
+  }
+  .icon-btn {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent; color: var(--fg-muted);
+    border-radius: 7px; cursor: pointer;
+    transition: background .12s ease, color .12s ease;
+  }
+  .icon-btn:hover { background: var(--bg-soft); color: var(--fg); }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .new-session {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 12px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 22%, transparent), color-mix(in srgb, var(--accent) 14%, transparent));
+    border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    border-radius: 10px;
+    color: var(--fg); font: 500 12px/1 var(--font-mono);
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in srgb, white 6%, transparent),
+      0 4px 16px -6px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .right-cluster { display: flex; gap: 8px; }
+
+  /* ============== Cells ================================================ */
+  .cells { position: absolute; inset: 0; }
+  .cell {
+    position: absolute;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow:
+      0 1px 0 0 rgba(255,255,255,0.04) inset,
+      0 24px 64px -28px rgba(0,0,0,0.7),
+      0 2px 6px -2px rgba(0,0,0,0.35);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .cell:hover { border-color: color-mix(in srgb, var(--border-strong) 130%, transparent); }
+  .cell.selected {
+    border-color: var(--accent);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent),
+      0 0 80px -10px color-mix(in srgb, var(--accent) 50%, transparent),
+      0 24px 64px -28px rgba(0,0,0,0.7);
+  }
+  .cell-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .provider-pill {
+    width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+  }
+  .provider-pill svg { width: 12px; height: 12px; }
+  .cell-title { flex: 1; font: 500 12px/1 var(--font-mono); color: var(--fg); }
+  .model-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font: 500 10px/1 var(--font-mono);
+  }
+  .model-chip .dot { width: 6px; height: 6px; border-radius: 999px; }
+  .model-chip .dot.streaming { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .5; transform: scale(.8); }
+  }
+  .info-strip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 50%, transparent);
+    font: 500 9px/1 var(--font-mono);
+    color: var(--fg-subtle);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .info-strip span.val { color: var(--fg-muted); text-transform: none; letter-spacing: 0; }
+  .info-strip .sep { color: color-mix(in srgb, var(--fg-subtle) 40%, transparent); }
+
+  /* ============== Cell variants ======================================== */
+  .cell.claude .provider-pill { background: color-mix(in srgb, var(--claude) 16%, transparent); color: var(--claude); }
+  .cell.claude .model-chip { background: color-mix(in srgb, var(--claude) 14%, transparent); color: var(--claude); }
+  .cell.gpt .provider-pill { background: color-mix(in srgb, var(--gpt) 16%, transparent); color: var(--gpt); }
+  .cell.gpt .model-chip { background: color-mix(in srgb, var(--gpt) 14%, transparent); color: var(--gpt); }
+  .cell.gemini .provider-pill { background: color-mix(in srgb, var(--gemini) 16%, transparent); color: var(--gemini); }
+  .cell.gemini .model-chip { background: color-mix(in srgb, var(--gemini) 14%, transparent); color: var(--gemini); }
+
+  /* ============== Conversation body ==================================== */
+  .messages {
+    flex: 1; padding: 14px;
+    display: flex; flex-direction: column; gap: 14px;
+    overflow: hidden;
+  }
+  .msg-row { display: flex; flex-direction: column; gap: 4px; }
+  .msg-label {
+    font: 500 9px/1 var(--font-mono);
+    color: var(--fg-subtle);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .fork-button {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 18px; padding: 0 7px;
+    border: 1px solid var(--border-strong); background: var(--bg);
+    border-radius: 5px;
+    color: var(--fg-muted);
+    font: 500 9px/1 var(--font-mono);
+    cursor: pointer;
+    transition: all .12s ease;
+  }
+  .fork-button:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .fork-button svg { width: 10px; height: 10px; }
+  .msg-body {
+    font: 13px/1.55 var(--font-mono);
+    color: var(--fg);
+  }
+  .msg-body .prefix { color: var(--fg-subtle); user-select: none; }
+  .msg-body code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 0.9em;
+  }
+
+  /* ============== Composer ============================================= */
+  .composer {
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    padding: 10px;
+  }
+  .composer-input {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: color-mix(in srgb, white 4%, var(--bg-elevated));
+    box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04);
+    transition: all .15s ease;
+  }
+  .composer-input:focus-within {
+    border-color: var(--accent);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255,255,255,0.04),
+      0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  .composer-input .prefix { color: var(--fg-subtle); font: 13px/1 var(--font-mono); }
+  .composer-input input {
+    flex: 1; border: none; outline: none; background: transparent;
+    color: var(--fg);
+    font: 13px/1.4 var(--font-mono);
+  }
+  .composer-input input::placeholder { color: var(--fg-subtle); }
+  .send-btn {
+    width: 24px; height: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent;
+    color: var(--fg-muted); border-radius: 6px;
+    cursor: pointer; transition: all .12s ease;
+  }
+  .send-btn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .send-btn svg { width: 14px; height: 14px; }
+  .composer-footer {
+    margin-top: 8px; padding: 0 4px;
+    display: flex; justify-content: space-between; align-items: center;
+    font: 500 9px/1 var(--font-mono); color: var(--fg-subtle);
+  }
+  .kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 14px; height: 14px; padding: 0 4px;
+    border: 1px solid var(--border-strong); background: var(--bg-elevated);
+    border-radius: 3px; color: var(--fg-muted);
+  }
+  .composer-footer .fork-cta {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 24px; padding: 0 10px;
+    border: 1px solid var(--border-strong); background: var(--bg-elevated);
+    border-radius: 7px;
+    color: var(--fg-muted);
+    font: 500 10px/1 var(--font-mono);
+    cursor: pointer;
+    transition: all .12s ease;
+  }
+  .composer-footer .fork-cta:hover {
+    border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+  }
+  .composer-footer .fork-cta svg { width: 11px; height: 11px; }
+
+  /* ============== Lineage edges (SVG) ================================== */
+  .edges { position: absolute; inset: 0; pointer-events: none; }
+
+  /* ============== Watermark/credit ===================================== */
+  .credit {
+    position: absolute; bottom: 14px; left: 14px;
+    font: 500 10px/1 var(--font-mono); color: var(--fg-subtle);
+    background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 9px;
+    z-index: 10;
+  }
+  .credit b { color: var(--fg); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="grid"></div>
+
+  <!-- =================== Top bar =================== -->
+  <div class="topbar">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <div class="pill">
+        <span class="logo-dot"></span>
+        forkly
+        <span style="color:var(--fg-subtle); font-size:10px;">v0.1.0</span>
+      </div>
+      <div class="pill" style="background: color-mix(in srgb, var(--bg-elevated) 65%, transparent);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        test workspace
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="right-cluster">
+      <div class="chrome-group">
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></button>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
+      </div>
+      <div class="chrome-group">
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+        <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></button>
+      </div>
+      <button class="pill" style="cursor:pointer;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>import</button>
+      <button class="new-session">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        new session
+      </button>
+    </div>
+  </div>
+
+  <!-- =================== Lineage edges =================== -->
+  <svg class="edges" width="100%" height="100%">
+    <defs>
+      <linearGradient id="lineage-grad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#7c5cff" stop-opacity="0.7"/>
+        <stop offset="1" stop-color="#5b8def" stop-opacity="0.6"/>
+      </linearGradient>
+      <linearGradient id="lineage-grad-stream" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#7c5cff" stop-opacity="0.95"/>
+        <stop offset="1" stop-color="#5b8def" stop-opacity="0.95"/>
+      </linearGradient>
+    </defs>
+    <!-- Claude → GPT -->
+    <path d="M 475 360 C 580 360 580 230 700 230" stroke="url(#lineage-grad-stream)" stroke-width="1.6" fill="none" stroke-dasharray="6 4">
+      <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="1.4s" repeatCount="indefinite"/>
+    </path>
+    <!-- Claude → Gemini -->
+    <path d="M 475 470 C 600 470 600 600 720 600" stroke="url(#lineage-grad)" stroke-width="1.3" fill="none" opacity="0.7"/>
+  </svg>
+
+  <!-- =================== Cells =================== -->
+  <div class="cells">
+    <!-- Claude (parent, selected, full chat) -->
+    <div class="cell claude selected" style="left:80px; top:120px; width:400px; height:520px;">
+      <div class="cell-header">
+        <div class="provider-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l3-3 3 3 3-3 3 3 3-3 3 3"/><path d="M3 18l3-3 3 3 3-3 3 3 3-3 3 3"/></svg>
+        </div>
+        <div class="cell-title">initial greeting</div>
+        <div class="model-chip"><span class="dot" style="background:var(--claude)"></span>sonnet 4.6</div>
+      </div>
+      <div class="info-strip">
+        <span>tokens</span><span class="val">1.2k › 480</span>
+        <span class="sep">·</span>
+        <span>turns</span><span class="val">4</span>
+        <span class="sep">·</span>
+        <span>last</span><span class="val">12s ago</span>
+        <span class="sep">·</span>
+        <span class="val">⎇ main</span>
+      </div>
+      <div class="messages">
+        <div class="msg-row">
+          <div class="msg-label">
+            <span>YOU</span>
+            <button class="fork-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>fork</button>
+          </div>
+          <div class="msg-body"><span class="prefix">› </span>explain forkly's spatial canvas in one paragraph</div>
+        </div>
+        <div class="msg-row">
+          <div class="msg-label">
+            <span>SONNET 4.6</span>
+            <button class="fork-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>fork</button>
+          </div>
+          <div class="msg-body">Forkly turns linear LLM conversations into a <code>spatial canvas</code> where each session is a node and every reply can branch into a parallel exploration. Fork from any message to compare prompts, swap models, or explore alternative directions — all rendered as lineage threads you can read at a glance.</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="composer-input">
+          <span class="prefix">›</span>
+          <input placeholder="type a message…" />
+          <button class="send-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 7-7 7 7M12 19V5"/></svg></button>
+        </div>
+        <div class="composer-footer">
+          <div style="display:flex; gap:6px; align-items:center;">
+            <span class="kbd">↵</span><span>send</span>
+            <span style="color: color-mix(in srgb, var(--fg-subtle) 60%, transparent);">·</span>
+            <span class="kbd">⇧↵</span><span>newline</span>
+          </div>
+          <button class="fork-cta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9v2a3 3 0 0 1-3 3h-6"/></svg>
+            fork ⇢
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GPT (forked, streaming) -->
+    <div class="cell gpt" style="left:700px; top:150px; width:380px; height:340px;">
+      <div class="cell-header">
+        <div class="provider-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l3-3 3 3 3-3 3 3 3-3 3 3"/></svg>
+        </div>
+        <div class="cell-title">fork → openai</div>
+        <div class="model-chip"><span class="dot streaming" style="background:var(--gpt)"></span>gpt 5.4</div>
+      </div>
+      <div class="info-strip">
+        <span>tokens</span><span class="val">23k › 119</span>
+        <span class="sep">·</span>
+        <span>turns</span><span class="val">2</span>
+        <span class="sep">·</span>
+        <span>last</span><span class="val">now</span>
+      </div>
+      <div class="messages">
+        <div class="msg-row">
+          <div class="msg-label"><span>YOU</span></div>
+          <div class="msg-body"><span class="prefix">› </span>same question, with your spin</div>
+        </div>
+        <div class="msg-row">
+          <div class="msg-label"><span>GPT 5.4</span></div>
+          <div class="msg-body">Think of Forkly as Figma for prompts: instead of a linear chat, you get a board where every interesting answer becomes a node you can branch from. Run the same context through Claude, then through GPT, then through Gemini, side-by-side<span style="color: var(--accent); animation: blink 1s infinite;">▍</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gemini (forked, idle) -->
+    <div class="cell gemini" style="left:720px; top:520px; width:360px; height:260px;">
+      <div class="cell-header">
+        <div class="provider-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l3-3 3 3 3-3 3 3 3-3 3 3"/></svg>
+        </div>
+        <div class="cell-title">fork → google</div>
+        <div class="model-chip"><span class="dot" style="background:var(--gemini)"></span>gemini 2.5 flash</div>
+      </div>
+      <div class="info-strip">
+        <span>tokens</span><span class="val">1.4k › 92</span>
+        <span class="sep">·</span>
+        <span>turns</span><span class="val">2</span>
+        <span class="sep">·</span>
+        <span>last</span><span class="val">3m ago</span>
+      </div>
+      <div class="messages">
+        <div class="msg-row">
+          <div class="msg-label"><span>GEMINI 2.5 FLASH</span></div>
+          <div class="msg-body">Forkly maps a conversation tree onto an infinite canvas. Each cell is a session; lineage threads show which forks share context. Hit fork on any message, pick a different model, and the same question gets answered three ways at once.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="credit">forkly · direction 01 — <b>Linear / Raycast</b></div>
+</div>
+<style>
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+</style>
+</body>
+</html>

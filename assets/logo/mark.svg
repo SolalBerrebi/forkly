@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Forkly logo mark — the "forking trunk".
+
+  Reads as both:
+    • a fork-diagram: one trunk splitting into two branches with terminal nodes
+    • a lowercase 'f' silhouette — the crossbar at the top, the descender below
+
+  Color: violet → indigo → pink gradient that matches the in-app accent.
+  Use `currentColor` if you want monotone (e.g. on a colored background).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="forkly-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="55%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#f0abfc"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square so the mark works on any color surface. -->
+  <rect x="2" y="2" width="60" height="60" rx="14" ry="14" fill="url(#forkly-grad)"/>
+
+  <!-- Soft inner highlight for the "glass" look. -->
+  <rect x="2" y="2" width="60" height="30" rx="14" ry="14" fill="white" opacity="0.18"/>
+
+  <!-- The trunk: vertical stroke from bottom-middle up to the fork joint. -->
+  <path
+    d="M 32 50 L 32 30"
+    stroke="white" stroke-width="5"
+    stroke-linecap="round" fill="none"
+  />
+
+  <!-- The fork joint splits into two branches that terminate in dots. -->
+  <path
+    d="M 32 30 C 32 24, 22 22, 22 16"
+    stroke="white" stroke-width="5"
+    stroke-linecap="round" fill="none"
+  />
+  <path
+    d="M 32 30 C 32 24, 42 22, 42 16"
+    stroke="white" stroke-width="5"
+    stroke-linecap="round" fill="none"
+  />
+
+  <!-- Terminal "session" dots at the end of each branch. -->
+  <circle cx="22" cy="16" r="3.5" fill="white"/>
+  <circle cx="42" cy="16" r="3.5" fill="white"/>
+
+  <!-- The trunk's root dot — anchors the eye and reinforces the tree metaphor. -->
+  <circle cx="32" cy="50" r="3" fill="white" opacity="0.85"/>
+</svg>

@@ -1,0 +1,89 @@
+name: Bug report
+description: Something in Forkly is broken — wrong behavior, crash, visual glitch.
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! A few seconds spent filling these fields will save us a back-and-forth.
+
+  - type: input
+    id: version
+    attributes:
+      label: Forkly version
+      description: From `Settings → About`, or the version line in the top-left pill (e.g. `v0.1.0-dev`).
+      placeholder: v0.1.0-dev
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport involved (if relevant)
+      options:
+        - Anthropic API key
+        - Claude Code CLI
+        - OpenAI API key
+        - Codex CLI
+        - Google Gemini API
+        - Ollama (local)
+        - Not transport-related
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug. A screenshot or short screen recording helps a lot.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a Claude session
+        2. Fork it into GPT
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Network log row (if a stream failed)
+      description: |
+        Open the in-app network log (`⌘⇧N`), expand the failed row, and paste its detail here. This often pinpoints the exact upstream call that broke.
+      render: shell
+
+  - type: checkboxes
+    id: dco
+    attributes:
+      label: Confirmation
+      options:
+        - label: I checked existing issues and didn't find a duplicate.
+          required: true

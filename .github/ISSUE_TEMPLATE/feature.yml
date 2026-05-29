@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest a new feature, capability, or UX improvement.
+title: "feature: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! The strongest feature requests describe the problem first and the solution second. We'd rather hear about the workflow you wish you had than the button you wish existed.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: What were you doing when you wished Forkly worked differently? Skip the proposal — we want the workflow.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your proposed solution (optional)
+      description: If you already have a design in mind, share it. We may suggest a different approach that fits the canvas better.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Workarounds you've tried, other tools that handle this well, etc.
+
+  - type: checkboxes
+    id: dco
+    attributes:
+      label: Confirmation
+      options:
+        - label: I checked existing issues and discussions and didn't find a duplicate.
+          required: true

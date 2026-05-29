@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Favicon variant — same mark, no rounded background, optimized for small
+     sizes (16x16 / 32x32). The trunk is slightly thicker so it survives
+     down-rasterization. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="fav-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="55%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#f0abfc"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="64" height="64" rx="12" fill="url(#fav-grad)"/>
+  <path d="M 32 52 L 32 30" stroke="white" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <path d="M 32 30 C 32 22, 20 20, 20 12" stroke="white" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <path d="M 32 30 C 32 22, 44 20, 44 12" stroke="white" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <circle cx="20" cy="12" r="4" fill="white"/>
+  <circle cx="44" cy="12" r="4" fill="white"/>
+</svg>

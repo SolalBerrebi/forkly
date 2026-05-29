@@ -70,14 +70,52 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # ----- macOS code signing + notarization -----
+          # tauri-action looks for these env vars on macOS runs and uses them
+          # to sign the .app, package the .dmg, and submit to Apple's
+          # notarization service. All are repo Secrets — set them in
+          # Settings → Secrets and variables → Actions. Each Secret is
+          # explained in docs/RELEASING.md.
+          #
+          # The certificate is a base64-encoded .p12 file of the
+          # "Developer ID Application" cert exported from Keychain.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Apple ID + an app-specific password generated at
+          # https://appleid.apple.com → Sign-In and Security → App-Specific
+          # Passwords. NOT your real Apple ID password.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Arbitrary password tauri-action uses for the temporary keychain
+          # it imports the cert into. Any non-empty string is fine.
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+
+          # ----- Tauri auto-updater signing (optional) -----
+          # If we later enable in-app updates via tauri-plugin-updater, the
+          # updater needs a separate Ed25519 key pair. Until then these are
+          # left unset and the updater is disabled.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Forkly ${{ github.ref_name }}'
           releaseBody: |
-            See the [changelog](https://github.com/forkly/forkly/blob/main/CHANGELOG.md)
+            See the [changelog](https://github.com/SolalBerrebi/forkly/blob/main/CHANGELOG.md)
             for what's in this release.
 
             Pick the asset below that matches your platform.
+
+            **macOS users**: the `.dmg` is signed with our Developer ID cert
+            and notarized by Apple. You can install it without right-click → Open.
+
+            **Linux users**: pick the `.AppImage` for distro-agnostic install
+            or the `.deb` for Debian/Ubuntu.
+
+            **Windows users**: the `.msi` installer is unsigned in this
+            release. Windows SmartScreen may warn — click "More info" → "Run anyway".
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

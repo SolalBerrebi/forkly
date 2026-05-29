@@ -1,0 +1,77 @@
+name: Provider request
+description: Ask for support of a new LLM provider, model family, or local runtime.
+title: "provider: "
+labels: ["provider", "enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adding a new provider is usually a one-day job thanks to the shared streaming abstraction. Help us scope it by filling these in.
+
+        See [`src/providers/models.ts`](../../tree/main/src/providers/models.ts) and [`src-tauri/src/providers/`](../../tree/main/src-tauri/src/providers/) for examples of the four we already support.
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider name
+      placeholder: e.g. Mistral, xAI, OpenRouter, vLLM, LM Studio…
+    validations:
+      required: true
+
+  - type: input
+    id: api-url
+    attributes:
+      label: API documentation URL
+      description: The streaming chat-completion endpoint, ideally.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: auth-style
+    attributes:
+      label: Auth style
+      options:
+        - API key (header)
+        - API key (URL param)
+        - OAuth via CLI subprocess
+        - No auth (local)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stream-format
+    attributes:
+      label: Streaming format
+      options:
+        - Server-Sent Events (SSE), OpenAI-style chunks
+        - SSE, custom payload
+        - NDJSON over HTTP
+        - NDJSON via subprocess
+        - WebSocket
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: models
+    attributes:
+      label: Models you'd want available in the picker
+      description: 2–6 model ids and their short labels. Optional but helps us pre-fill the catalog.
+      placeholder: |
+        - mistral-large-latest
+        - mistral-medium
+
+  - type: textarea
+    id: free-tier
+    attributes:
+      label: Free-tier story
+      description: Does this provider have a meaningful free tier? If yes, could we walk a user through getting a free key the way we do for Gemini AI Studio?
+
+  - type: checkboxes
+    id: dco
+    attributes:
+      label: Confirmation
+      options:
+        - label: I checked open issues and discussions and didn't find an existing request for this provider.
+          required: true
