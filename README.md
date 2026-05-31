@@ -104,6 +104,7 @@ Forkly is being built in milestones. Status as of `pre-alpha`:
 - [x] **M2** — Single-session chat: Claude Code (subscription) + Anthropic API key transports
 - [x] **M3** — Forking, fan-out (`2`–`9`), merge nodes (`M`), auto-titling
 - [x] **M4** — Zoom-dependent rendering (full chat → label)
+- [x] **M5** — _multi-provider groundwork (folded into M8, which shipped OpenAI / Google / Ollama)_
 - [x] **M6** — Workspaces ("pages / sheets"), delete with confirm, tooltips, release pipeline
 - [x] **M7** — Per-cell info chips, resizable cells, dagre auto-layout, network log drawer, live-linked Claude Code session import, per-cell appearance toggle (terminal ↔ chat)
 - [x] **M8** — OpenAI (Codex CLI + API), Google (Gemini API + free walkthrough), Ollama (local), cross-LLM fork picker, first-launch onboarding
