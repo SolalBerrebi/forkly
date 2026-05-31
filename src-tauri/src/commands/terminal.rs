@@ -65,10 +65,10 @@ pub async fn run_in_terminal(script: String) -> AppResult<()> {
                 return Ok(());
             }
         }
-        return Err(AppError::Other(
+        Err(AppError::Other(
             "no supported terminal emulator found (gnome-terminal, konsole, xfce4-terminal, xterm)"
                 .into(),
-        ));
+        ))
     }
 
     #[cfg(target_os = "windows")]
@@ -84,7 +84,7 @@ pub async fn run_in_terminal(script: String) -> AppResult<()> {
             .status()
             .await
             .map_err(|e| AppError::Other(format!("start cmd: {e}")))?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
