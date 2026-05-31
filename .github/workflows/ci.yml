@@ -35,7 +35,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # pnpm 11.4 (pinned in package.json's packageManager) needs Node >=
+          # 22.13 — it imports the node:sqlite built-in. Node 20 crashes the
+          # `cache: pnpm` probe with ERR_UNKNOWN_BUILTIN_MODULE before any
+          # build step runs.
+          node-version: 22
           cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
