@@ -43,9 +43,9 @@ jobs:
             libssl-dev
 
       - name: Install pnpm
+        # No `version:` — read the pinned version from package.json's
+        # `packageManager` field (passing both can error).
         uses: pnpm/action-setup@v3
-        with:
-          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

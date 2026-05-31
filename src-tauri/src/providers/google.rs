@@ -94,10 +94,7 @@ struct GeminiErrorBody {
     message: Option<String>,
 }
 
-pub async fn stream_chat(
-    req: ApiStreamRequest,
-    tx: mpsc::Sender<StreamEvent>,
-) -> AppResult<()> {
+pub async fn stream_chat(req: ApiStreamRequest, tx: mpsc::Sender<StreamEvent>) -> AppResult<()> {
     // Map Forkly's "assistant" role to Gemini's "model". System turns are
     // filtered out by the caller (stream.rs); we still skip them here in
     // case any leaked through.
@@ -147,7 +144,7 @@ pub async fn stream_chat(
         key = urlencoding::encode(&req.api_key)
     );
 
-    let client = reqwest::Client::new();
+    let client = crate::providers::http_client();
     let res = client
         .post(&url)
         .header("content-type", "application/json")
@@ -204,9 +201,7 @@ pub async fn stream_chat(
             if let Some(content) = candidate.content {
                 for part in content.parts {
                     if let Some(text) = part.text {
-                        if !text.is_empty()
-                            && tx.send(StreamEvent::Delta(text)).await.is_err()
-                        {
+                        if !text.is_empty() && tx.send(StreamEvent::Delta(text)).await.is_err() {
                             return Ok(()); // receiver dropped
                         }
                     }

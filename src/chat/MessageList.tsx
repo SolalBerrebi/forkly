@@ -20,13 +20,17 @@ export function MessageList({ sessionId }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
 
-  // Maintain a "stick to bottom" mode unless the user scrolls up.
+  // Re-pin to the bottom when messages are added or the last one grows
+  // (streaming). Gated on those deps so it doesn't do a forced layout write on
+  // every unrelated re-render (another session streaming, a pan tick, hover).
+  const lastId = ids.length > 0 ? ids[ids.length - 1] : null;
+  const lastContent = lastId ? byId[lastId]?.content ?? "" : "";
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (el && stickToBottomRef.current) {
       el.scrollTop = el.scrollHeight;
     }
-  });
+  }, [ids, lastContent]);
 
   const handleScroll = () => {
     const el = containerRef.current;

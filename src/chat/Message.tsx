@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { ProviderPicker } from "../chrome/ProviderPicker";
 import { getAvailableProviders } from "../lib/availableProviders";
 import type { Message as MessageT } from "../lib/ipc";
+import { isOverlayOpen } from "../lib/overlay";
 import { useAppearance } from "../state/appearanceContext";
 import { useDetectionStore } from "../state/detectionStore";
 import { useWorkspaceStore } from "../state/workspaceStore";
@@ -63,11 +64,14 @@ function MessageImpl({ message, isStreaming, error }: MessageProps) {
     if (!hovered || isStreaming) return;
     const handler = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement | null;
+      // Bail in a text field, or while a menu/dialog/popover is open (so a
+      // number key meant for the open model picker doesn't fan out behind it).
       if (
-        tgt &&
-        (tgt.tagName === "INPUT" ||
-          tgt.tagName === "TEXTAREA" ||
-          tgt.isContentEditable)
+        (tgt &&
+          (tgt.tagName === "INPUT" ||
+            tgt.tagName === "TEXTAREA" ||
+            tgt.isContentEditable)) ||
+        isOverlayOpen()
       ) {
         return;
       }

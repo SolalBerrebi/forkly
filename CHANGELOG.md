@@ -4,6 +4,45 @@ All notable changes to Forkly. The format roughly follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Hardened — pre-launch audit pass
+
+Reliability, security, and polish work to take Forkly from a great demo to a
+shippable product.
+
+- **Stop a running generation** — every streaming cell now has a Stop button;
+  in-flight streams are tracked in a registry and cancelled cleanly (partial
+  output is kept). Deleting a node or quitting the app aborts its stream and
+  reaps any CLI subprocess instead of orphaning it.
+- **Fixed the Claude Code "wedge"** — a session whose first turn failed (auth /
+  network) is no longer stuck forever trying to `--resume` a session Claude
+  Code never created; it correctly retries with `--session-id`.
+- **Stream timeouts** — HTTP providers get a connect + idle timeout, so a
+  stalled connection surfaces an error instead of spinning forever (Ollama is
+  exempt so local cold-loads aren't cut off).
+- **CLI PATH fix** — `claude` / `codex` are resolved against an augmented PATH
+  so the app finds them even when launched from Finder/Dock (which don't
+  inherit your shell PATH); a missing CLI now gives an actionable message.
+- **No more subprocess deadlock** — CLI stderr is drained concurrently, so a
+  chatty CLI can't fill the pipe and hang the read loop.
+- **Security**: a strict Content-Security-Policy is now set; the network log
+  scrubs anything key-shaped (incl. the Gemini key in request URLs);
+  `~/.claude/projects` import paths are validated against traversal; keychain
+  access runs off the async runtime; CC import is transactional.
+- **Crash safety**: a React error boundary (app-wide + per cell) replaces
+  white-screens with a recoverable fallback; a failed initial load shows a real
+  error + retry instead of a misleading empty canvas; deltas that arrive before
+  their stream starts are buffered (no lost leading tokens); the messages store
+  is purged on delete / workspace switch (no unbounded growth).
+- **UX**: `Reorganize` now uses the correct cell footprint (no overlapping
+  nodes); Enter no longer sends mid-IME-composition (CJK/accents); canvas
+  shortcuts (Delete/`M`/`2`–`9`) no longer fire while a menu/dialog is open;
+  the version pill reads the real app version; auto-titling falls back to the
+  first message when Claude Code isn't available.
+- **Tooling**: clippy + rustfmt + ESLint now gate CI (clippy was previously
+  non-blocking); CI covers Windows; the version pill, `SECURITY.md`, a PR
+  template, and `docs/architecture.md` + `docs/providers.md` round out the
+  open-source setup.
+
 ### Added — M8: Multi-provider integration
 
 - **OpenAI provider** — both transports:

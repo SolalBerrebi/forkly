@@ -283,6 +283,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         state.currentWorkspaceId = id;
         state.sessions = {};
       });
+      // Drop the leaving workspace's cached messages so the store doesn't grow
+      // across switches; sessions re-hydrate from the DB on demand.
+      useMessagesStore.getState().purgeAll();
       ipc.listSessions(id)
         .then((rows) => {
           set((state) => {
@@ -323,6 +326,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           persistCurrentWorkspace(next);
         }
       });
+      // Drop cached messages so a deleted workspace's sessions don't linger.
+      useMessagesStore.getState().purgeAll();
       // Re-hydrate sessions for the (possibly new) current workspace.
       const cur = get().currentWorkspaceId;
       try {
@@ -738,6 +743,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       set((state) => {
         delete state.sessions[id];
       });
+      // Drop this session's cached messages/streaming flags so they don't
+      // linger in the store after the node is gone.
+      useMessagesStore.getState().purgeSession(id);
       await ipc.deleteSession(id);
     },
   })),

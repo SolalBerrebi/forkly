@@ -29,7 +29,9 @@ export function formatRelativeTime(ms: number, now: number = Date.now()): string
  */
 export function formatCompactCount(n: number): string {
   if (n < 1_000) return n.toString();
-  if (n < 10_000) return `${(n / 1_000).toFixed(1)}k`;
+  // Unary + drops a trailing `.0` so 1000 → "1k" (not "1.0k") and 1_000_000 →
+  // "1M" (not "1.0M").
+  if (n < 10_000) return `${+(n / 1_000).toFixed(1)}k`;
   if (n < 1_000_000) return `${Math.floor(n / 1_000)}k`;
-  return `${(n / 1_000_000).toFixed(1)}M`;
+  return `${+(n / 1_000_000).toFixed(1)}M`;
 }

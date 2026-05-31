@@ -13,9 +13,12 @@ import "@fontsource/geist-mono/600.css";
 import "@xyflow/react/dist/style.css";
 import "./theme/globals.css";
 import App from "./App";
+import { ErrorBoundary } from "./chrome/ErrorBoundary";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary label="app">
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

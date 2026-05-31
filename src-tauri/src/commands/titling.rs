@@ -9,10 +9,11 @@
 use crate::commands::messages::build_history;
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
+use crate::providers::cli_runner;
+use crate::types::Message;
 use crate::AppState;
 use std::process::Stdio;
 use tauri::State;
-use tokio::process::Command;
 
 const TITLING_MODEL: &str = "haiku";
 
@@ -21,10 +22,7 @@ const TITLING_PROMPT: &str = "Summarize the following exchange as a session titl
     Respond with ONLY the title text on a single line, nothing else.";
 
 #[tauri::command]
-pub async fn auto_title(
-    state: State<'_, AppState>,
-    session_id: String,
-) -> AppResult<String> {
+pub async fn auto_title(state: State<'_, AppState>, session_id: String) -> AppResult<String> {
     let pool = state.db().await?;
 
     let history = build_history(pool, &session_id).await?;
@@ -52,7 +50,46 @@ pub async fn auto_title(
 
     let full_prompt = format!("{TITLING_PROMPT}\n\nEXCHANGE:\n{transcript}");
 
-    let output = Command::new("claude")
+    // Prefer a model-generated title via the Claude CLI. If Claude isn't
+    // available (not installed / not logged in — common for users on Codex,
+    // API keys, or Ollama only) or returns nothing usable, fall back to a
+    // title derived from the first user message so EVERY session still gets a
+    // real label instead of being stuck on a default placeholder.
+    let cleaned = match run_claude_titling(&full_prompt).await {
+        Ok(raw) => {
+            let c = sanitize_title(&raw);
+            if c.is_empty() {
+                fallback_title(&history)
+            } else {
+                c
+            }
+        }
+        Err(e) => {
+            tracing::info!(error = %e, "auto-title via claude unavailable; using first-message fallback");
+            fallback_title(&history)
+        }
+    };
+
+    if cleaned.is_empty() {
+        return Err(AppError::Other("could not derive a title".into()));
+    }
+
+    let now = now_ms();
+    sqlx::query("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?")
+        .bind(&cleaned)
+        .bind(now)
+        .bind(&session_id)
+        .execute(pool)
+        .await?;
+
+    Ok(cleaned)
+}
+
+/// Run the cheap Haiku titling call via the Claude CLI. Returns the raw
+/// (unsanitized) stdout, or an error if the CLI is missing / not logged in /
+/// exits non-zero.
+async fn run_claude_titling(full_prompt: &str) -> AppResult<String> {
+    let output = cli_runner::command("claude")
         .arg("--print")
         .arg("--no-session-persistence")
         .arg("--allowedTools")
@@ -76,21 +113,18 @@ pub async fn auto_title(
         )));
     }
 
-    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let cleaned = sanitize_title(&raw);
-    if cleaned.is_empty() {
-        return Err(AppError::Other("titling returned empty output".into()));
-    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
 
-    let now = now_ms();
-    sqlx::query("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?")
-        .bind(&cleaned)
-        .bind(now)
-        .bind(&session_id)
-        .execute(pool)
-        .await?;
-
-    Ok(cleaned)
+/// Deterministic fallback: the first user message squeezed through the same
+/// sanitizer (≤4 lowercase words) the model output goes through.
+fn fallback_title(history: &[Message]) -> String {
+    let first_user = history
+        .iter()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.as_str())
+        .unwrap_or("");
+    sanitize_title(first_user)
 }
 
 /// Coerce Haiku's response into a clean 4-word lowercase title even if it

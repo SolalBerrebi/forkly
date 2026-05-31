@@ -89,10 +89,7 @@ struct OpenAiError {
     kind: Option<String>,
 }
 
-pub async fn stream_chat(
-    req: ApiStreamRequest,
-    tx: mpsc::Sender<StreamEvent>,
-) -> AppResult<()> {
+pub async fn stream_chat(req: ApiStreamRequest, tx: mpsc::Sender<StreamEvent>) -> AppResult<()> {
     let mut messages: Vec<OutMessage> = Vec::with_capacity(req.messages.len() + 1);
     if let Some(sys) = req.system_prompt.as_deref() {
         if !sys.is_empty() {
@@ -119,7 +116,7 @@ pub async fn stream_chat(
         max_completion_tokens: Some(req.max_tokens),
     };
 
-    let client = reqwest::Client::new();
+    let client = crate::providers::http_client();
     let res = client
         .post(API_URL)
         .bearer_auth(&req.api_key)
@@ -135,7 +132,13 @@ pub async fn stream_chat(
         // Try to extract the structured error message; fall back to raw body.
         let msg = serde_json::from_str::<ErrorEnvelope>(&text)
             .ok()
-            .map(|e| format!("openai {status} ({}): {}", e.error.kind.unwrap_or_default(), e.error.message))
+            .map(|e| {
+                format!(
+                    "openai {status} ({}): {}",
+                    e.error.kind.unwrap_or_default(),
+                    e.error.message
+                )
+            })
             .unwrap_or_else(|| {
                 format!(
                     "openai {status}: {}",

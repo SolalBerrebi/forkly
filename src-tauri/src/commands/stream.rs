@@ -1,14 +1,11 @@
 use crate::commands::messages::{build_history, insert_message, update_message_content};
 use crate::commands::net_log::{self, LogEntry};
-use crate::commands::secrets::read_api_key;
+use crate::commands::secrets::read_api_key_async;
 use crate::error::{AppError, AppResult};
 use crate::providers::{
-    anthropic::stream_chat as stream_chat_anthropic,
-    claude_code::stream_chat as stream_chat_cc,
-    codex::stream_chat as stream_chat_codex,
-    google::stream_chat as stream_chat_google,
-    ollama::stream_chat as stream_chat_ollama,
-    openai::stream_chat as stream_chat_openai,
+    anthropic::stream_chat as stream_chat_anthropic, claude_code::stream_chat as stream_chat_cc,
+    codex::stream_chat as stream_chat_codex, google::stream_chat as stream_chat_google,
+    ollama::stream_chat as stream_chat_ollama, openai::stream_chat as stream_chat_openai,
     ApiStreamRequest, ChatMessage, ClaudeCodeRequest, CodexRequest, OllamaRequest, StreamEvent,
 };
 use crate::types::{Message, Session};
@@ -16,7 +13,7 @@ use crate::AppState;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use std::fmt::Write as _;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
 
 #[derive(Serialize, Clone)]
@@ -78,6 +75,38 @@ enum Dispatch {
     Ollama(OllamaRequest),
 }
 
+/// RAII guard for the one-stream-per-session registration. Deregisters on drop
+/// unless [`commit`](StreamGuard::commit) was called — i.e. unless we
+/// successfully handed the session off to the spawned streaming task, which
+/// then owns deregistration. This way an early error return between
+/// registration and spawn can never leave a session stuck as "streaming".
+struct StreamGuard<'a> {
+    state: &'a AppState,
+    session_id: String,
+    committed: bool,
+}
+
+impl<'a> StreamGuard<'a> {
+    fn new(state: &'a AppState, session_id: &str) -> Self {
+        Self {
+            state,
+            session_id: session_id.to_string(),
+            committed: false,
+        }
+    }
+    fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for StreamGuard<'_> {
+    fn drop(&mut self) {
+        if !self.committed {
+            self.state.finish_stream(&self.session_id);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn start_stream(
     app: AppHandle,
@@ -104,20 +133,33 @@ pub async fn start_stream(
     .await?
     .ok_or_else(|| AppError::NotFound(format!("session {session_id}")))?;
 
+    // Register the stream up front: rejects a concurrent second turn on the
+    // same session (which would corrupt CC's --resume chain), and yields the
+    // cancellation token the Stop button / node delete / app close signals.
+    // The guard auto-deregisters if any setup step below errors out; once we
+    // hand off to the spawned task we `commit()` and the task owns cleanup.
+    let app_state = state.inner();
+    let cancel = app_state.register_stream(&session.id).ok_or_else(|| {
+        AppError::BadRequest(
+            "a response is already streaming for this session — stop it or wait for it to finish"
+                .into(),
+        )
+    })?;
+    let guard = StreamGuard::new(app_state, &session.id);
+
     // 2. Determine if this is a continuation of an existing CC session, BEFORE
     //    we persist the new user message (which would otherwise contaminate
     //    the count). Only meaningful for transport=claude-code.
-    let prior_message_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM messages WHERE session_id = ?",
-    )
-    .bind(&session.id)
-    .fetch_one(&pool)
-    .await?;
+    let prior_message_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE session_id = ?")
+            .bind(&session.id)
+            .fetch_one(&pool)
+            .await?;
 
     // 3. Pre-flight: read transport-specific auth BEFORE any destructive writes.
     //    If auth fails, the user message never gets persisted — clean failure.
     let api_key = match session.transport_id.as_str() {
-        "api" => Some(read_api_key(&session.provider_id)?),
+        "api" => Some(read_api_key_async(&session.provider_id).await?),
         // CLI transports use OAuth tokens managed by the CLI itself; no key.
         "claude-code" | "codex" => None,
         // Local Ollama needs no auth at all.
@@ -134,8 +176,8 @@ pub async fn start_stream(
     //    final assistant responses. Frontend can call start_stream(merge_id, "")
     //    right after merge_sessions; the synthesis content lives entirely
     //    on the backend so prompt-engineering doesn't leak into the UI.
-    let is_merge_first_turn = session.merge_source_session_ids.is_some()
-        && prior_message_count == 0;
+    let is_merge_first_turn =
+        session.merge_source_session_ids.is_some() && prior_message_count == 0;
     let user_message = if is_merge_first_turn {
         build_synthesis_prompt(&pool, &session).await?
     } else {
@@ -143,8 +185,7 @@ pub async fn start_stream(
     };
 
     // 5. Persist user message.
-    let user_msg =
-        insert_message(&pool, &session.id, "user", &user_message, None, None).await?;
+    let user_msg = insert_message(&pool, &session.id, "user", &user_message, None, None).await?;
 
     // 5. Build the full conversation history (now includes the user message
     //    we just persisted). Used by both transports:
@@ -170,7 +211,9 @@ pub async fn start_stream(
                     })
                     .collect(),
                 max_tokens: 4096,
-                api_key: api_key.expect("api_key resolved above"),
+                api_key: api_key.ok_or_else(|| {
+                    AppError::Other("internal: api transport without a key".into())
+                })?,
             };
             // Route on provider — same transport_id ("api") covers multiple
             // HTTP backends, each with its own wire protocol.
@@ -186,8 +229,24 @@ pub async fn start_stream(
             }
         }
         "claude-code" => {
-            let is_fork_first_turn =
-                session.parent_session_id.is_some() && prior_message_count == 0;
+            // Whether Claude Code has actually CREATED its session hinges on a
+            // prior turn having produced a real assistant reply — NOT on raw
+            // message count. If the first turn failed (auth/network), the empty
+            // assistant row still bumps the count; keying `is_resume` off that
+            // would make every later turn `--resume` a CC session that was
+            // never created, wedging the conversation forever. Counting
+            // non-empty assistant turns means a failed first turn correctly
+            // retries with `--session-id` (and re-sends the fork prelude).
+            let cc_completed_turns: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM messages
+                 WHERE session_id = ? AND role = 'assistant' AND TRIM(content) <> ''",
+            )
+            .bind(&session.id)
+            .fetch_one(&pool)
+            .await?;
+            let cc_session_exists = cc_completed_turns > 0;
+
+            let is_fork_first_turn = session.parent_session_id.is_some() && !cc_session_exists;
 
             let cc_user_message = if is_fork_first_turn {
                 // Inherited history = everything in `history` except the
@@ -203,7 +262,7 @@ pub async fn start_stream(
                 system_prompt: session.system_prompt.clone(),
                 user_message: cc_user_message,
                 session_id: session.id.clone(),
-                is_resume: prior_message_count > 0,
+                is_resume: cc_session_exists,
             })
         }
         "codex" => {
@@ -235,7 +294,11 @@ pub async fn start_stream(
                 })
                 .collect(),
         }),
-        _ => unreachable!("validated above"),
+        other => {
+            return Err(AppError::BadRequest(format!(
+                "unsupported transport: {other}"
+            )))
+        }
     };
 
     // 6. Persist an empty assistant message; we'll fill content as we stream.
@@ -268,6 +331,10 @@ pub async fn start_stream(
     let model_for_log = session.model_id.clone();
     let log_started_at = crate::db::now_ms();
 
+    // Point of no return: the spawned task now owns deregistration of the
+    // session from the active-streams registry.
+    guard.commit();
+
     tauri::async_runtime::spawn(async move {
         let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
 
@@ -294,41 +361,64 @@ pub async fn start_stream(
         const MAX_TRACE_BYTES: usize = 4096;
         let mut trace_bytes: usize = 0;
 
-        while let Some(ev) = rx.recv().await {
-            match ev {
-                StreamEvent::Delta(text) => {
-                    accumulated.push_str(&text);
-                    app_for_task
-                        .emit(
-                            "stream:delta",
-                            StreamDeltaPayload {
-                                session_id: session_id_for_task.clone(),
-                                assistant_message_id: assistant_id.clone(),
-                                delta: text,
-                            },
-                        )
-                        .ok();
+        let mut cancelled = false;
+        loop {
+            tokio::select! {
+                biased;
+                // Stop button / node delete / app close trips this token.
+                _ = cancel.cancelled() => {
+                    cancelled = true;
+                    break;
                 }
-                StreamEvent::Usage {
-                    input_tokens: it,
-                    output_tokens: ot,
-                } => {
-                    input_tokens = it;
-                    output_tokens = ot;
-                }
-                StreamEvent::Trace(line) => {
-                    if trace_bytes < MAX_TRACE_BYTES {
-                        trace_bytes += line.len() + 1;
-                        trace_buf.push(line);
+                maybe_ev = rx.recv() => {
+                    let ev = match maybe_ev {
+                        Some(ev) => ev,
+                        None => break, // provider task ended (tx dropped)
+                    };
+                    match ev {
+                        StreamEvent::Delta(text) => {
+                            accumulated.push_str(&text);
+                            app_for_task
+                                .emit(
+                                    "stream:delta",
+                                    StreamDeltaPayload {
+                                        session_id: session_id_for_task.clone(),
+                                        assistant_message_id: assistant_id.clone(),
+                                        delta: text,
+                                    },
+                                )
+                                .ok();
+                        }
+                        StreamEvent::Usage {
+                            input_tokens: it,
+                            output_tokens: ot,
+                        } => {
+                            input_tokens = it;
+                            output_tokens = ot;
+                        }
+                        StreamEvent::Trace(line) => {
+                            if trace_bytes < MAX_TRACE_BYTES {
+                                trace_bytes += line.len() + 1;
+                                trace_buf.push(line);
+                            }
+                        }
+                        StreamEvent::Done => break,
                     }
                 }
-                StreamEvent::Done => break,
             }
         }
 
-        let provider_result = match provider_handle.await {
-            Ok(r) => r,
-            Err(je) => Err(AppError::Other(format!("task panic: {je}"))),
+        let provider_result = if cancelled {
+            // User stopped the stream. Abort the provider task — for CLI
+            // transports kill_on_drop reaps the child; for HTTP it drops the
+            // response and closes the socket. Whatever streamed so far is kept.
+            provider_handle.abort();
+            Ok(())
+        } else {
+            match provider_handle.await {
+                Ok(r) => r,
+                Err(je) => Err(AppError::Other(format!("task panic: {je}"))),
+            }
         };
 
         // Persist whatever we accumulated, even on error.
@@ -342,7 +432,9 @@ pub async fn start_stream(
         .await;
 
         match provider_result {
-            Ok(()) if accumulated.trim().is_empty() => {
+            // A user-initiated stop with no content yet is not an error — fall
+            // through to the normal completion path and finalize quietly.
+            Ok(()) if accumulated.trim().is_empty() && !cancelled => {
                 // Provider succeeded but emitted zero content — most commonly
                 // a model returning empty due to content policy, max_tokens=0,
                 // or an upstream silently dropping the reply. Surface it so
@@ -448,7 +540,7 @@ pub async fn start_stream(
                     .emit(
                         "stream:done",
                         StreamDonePayload {
-                            session_id: session_id_for_task,
+                            session_id: session_id_for_task.clone(),
                             assistant_message_id: assistant_id,
                             content: accumulated,
                             input_tokens,
@@ -458,7 +550,10 @@ pub async fn start_stream(
                     .ok();
             }
             Err(e) => {
-                let err_str = e.to_string();
+                // Mask before it touches either the network log or the
+                // user-facing error — a provider connection error can echo the
+                // request URL, and Gemini's key lives in that URL.
+                let err_str = net_log::mask_secrets(&e.to_string());
                 net_log::record(
                     &app_for_task,
                     LogEntry {
@@ -482,8 +577,23 @@ pub async fn start_stream(
                 );
             }
         }
+
+        // Deregister so the next turn can start on this session (and so the
+        // registry never leaks). No-op if a stop/delete already removed it.
+        app_for_task
+            .state::<AppState>()
+            .finish_stream(&session_id_for_task);
     });
 
+    Ok(())
+}
+
+/// Stop an in-flight stream for `session_id`. Idempotent — a no-op if nothing
+/// is streaming for that session. The aborted task keeps whatever content it
+/// had already streamed (persisted as the assistant message).
+#[tauri::command]
+pub async fn stop_stream(state: State<'_, AppState>, session_id: String) -> AppResult<()> {
+    state.cancel_stream(&session_id);
     Ok(())
 }
 
@@ -505,10 +615,7 @@ pub async fn detect_ollama() -> crate::providers::ollama::OllamaStatus {
 /// Build the synthesis prompt for a merge node's first turn — collects
 /// each source session's final assistant response and asks the model to
 /// distill them into a single best-of answer.
-async fn build_synthesis_prompt(
-    pool: &SqlitePool,
-    session: &Session,
-) -> AppResult<String> {
+async fn build_synthesis_prompt(pool: &SqlitePool, session: &Session) -> AppResult<String> {
     let sources_json = session
         .merge_source_session_ids
         .as_ref()

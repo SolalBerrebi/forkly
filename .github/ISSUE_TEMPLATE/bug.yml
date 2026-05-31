@@ -12,8 +12,8 @@ body:
     id: version
     attributes:
       label: Forkly version
-      description: From `Settings → About`, or the version line in the top-left pill (e.g. `v0.1.0-dev`).
-      placeholder: v0.1.0-dev
+      description: The version line in the top-left pill, next to the Forkly wordmark (e.g. `v0.1.0`).
+      placeholder: v0.1.0
     validations:
       required: true
 

@@ -10,11 +10,13 @@ import type { Session, SessionId } from "../../state/workspaceStore";
  *  - parent_session_id → child (linear fork lineage)
  *  - each merge_source_session_id → merge child (the funnel)
  *
- * Defaults: 360x460 cell footprint (matches SessionNode default); user-
- * resized cells use their actual width/height.
+ * Defaults: 560x400 cell footprint. MUST match SessionNode's DEFAULT_WIDTH /
+ * DEFAULT_HEIGHT — fresh sessions have width/height === null until the user
+ * resizes, so a mismatch makes Reorganize (⌘⇧L) space default cells by the
+ * wrong footprint and they overlap. User-resized cells use their real size.
  */
-const DEFAULT_W = 360;
-const DEFAULT_H = 460;
+const DEFAULT_W = 560;
+const DEFAULT_H = 400;
 const RANK_SEP = 120;
 const NODE_SEP = 60;
 

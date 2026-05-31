@@ -90,7 +90,7 @@ pub async fn stream_chat(req: ApiStreamRequest, tx: mpsc::Sender<StreamEvent>) -
         system: req.system_prompt.as_deref(),
     };
 
-    let client = reqwest::Client::new();
+    let client = crate::providers::http_client();
     let res = client
         .post(API_URL)
         .header("x-api-key", &req.api_key)
@@ -103,10 +103,7 @@ pub async fn stream_chat(req: ApiStreamRequest, tx: mpsc::Sender<StreamEvent>) -
 
     let status = res.status();
     if !status.is_success() {
-        let text = res
-            .text()
-            .await
-            .unwrap_or_else(|_| status.to_string());
+        let text = res.text().await.unwrap_or_else(|_| status.to_string());
         return Err(AppError::Upstream(format!(
             "anthropic {status}: {}",
             text.chars().take(500).collect::<String>()

@@ -20,13 +20,12 @@ pub async fn list_workspaces(state: State<'_, AppState>) -> AppResult<Vec<Worksp
 }
 
 #[tauri::command]
-pub async fn create_workspace(
-    state: State<'_, AppState>,
-    name: String,
-) -> AppResult<Workspace> {
+pub async fn create_workspace(state: State<'_, AppState>, name: String) -> AppResult<Workspace> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err(AppError::BadRequest("workspace name cannot be empty".into()));
+        return Err(AppError::BadRequest(
+            "workspace name cannot be empty".into(),
+        ));
     }
 
     let pool = state.db().await?;
@@ -34,11 +33,10 @@ pub async fn create_workspace(
     let now = now_ms();
 
     // New workspaces go to the end of the list.
-    let next_order: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM workspaces",
-    )
-    .fetch_one(pool)
-    .await?;
+    let next_order: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM workspaces")
+            .fetch_one(pool)
+            .await?;
 
     sqlx::query(
         "INSERT INTO workspaces (id, name, sort_order, created_at, updated_at)
@@ -63,18 +61,18 @@ pub async fn rename_workspace(
 ) -> AppResult<Workspace> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err(AppError::BadRequest("workspace name cannot be empty".into()));
+        return Err(AppError::BadRequest(
+            "workspace name cannot be empty".into(),
+        ));
     }
     let pool = state.db().await?;
     let now = now_ms();
-    let result = sqlx::query(
-        "UPDATE workspaces SET name = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(trimmed)
-    .bind(now)
-    .bind(&id)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("UPDATE workspaces SET name = ?, updated_at = ? WHERE id = ?")
+        .bind(trimmed)
+        .bind(now)
+        .bind(&id)
+        .execute(pool)
+        .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("workspace {id}")));
@@ -87,10 +85,7 @@ pub async fn rename_workspace(
 /// Returns the remaining workspace ids (sorted) so the frontend can pick a
 /// new "current" workspace.
 #[tauri::command]
-pub async fn delete_workspace(
-    state: State<'_, AppState>,
-    id: String,
-) -> AppResult<Vec<String>> {
+pub async fn delete_workspace(state: State<'_, AppState>, id: String) -> AppResult<Vec<String>> {
     let pool = state.db().await?;
 
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workspaces")
@@ -117,11 +112,10 @@ pub async fn delete_workspace(
         return Err(AppError::NotFound(format!("workspace {id}")));
     }
 
-    let remaining: Vec<String> = sqlx::query_scalar(
-        "SELECT id FROM workspaces ORDER BY sort_order ASC, created_at ASC",
-    )
-    .fetch_all(pool)
-    .await?;
+    let remaining: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM workspaces ORDER BY sort_order ASC, created_at ASC")
+            .fetch_all(pool)
+            .await?;
     Ok(remaining)
 }
 

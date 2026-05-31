@@ -10,7 +10,6 @@
 //! system, summary, etc.). message.content can be a plain string OR an
 //! array of typed content blocks — we flatten to plain text.
 
-use crate::commands::messages::insert_message;
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::types::Session;
@@ -20,6 +19,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::State;
 use tokio::io::AsyncBufReadExt;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +62,35 @@ fn projects_root() -> AppResult<PathBuf> {
         .or_else(|| std::env::var_os("USERPROFILE"))
         .ok_or_else(|| AppError::Other("could not resolve home directory".into()))?;
     Ok(PathBuf::from(home).join(".claude").join("projects"))
+}
+
+/// Reject a project-dir value that could escape `~/.claude/projects`. These
+/// arrive from the frontend; a desktop webview runs our own trusted code, but
+/// a single path component (non-empty, no separators, not `.`/`..`) joined to
+/// the root provably can't traverse — cheap defense in depth that pairs with
+/// the strict CSP to keep a hypothetical renderer exploit from reading
+/// arbitrary files through these commands.
+fn validate_component(name: &str) -> AppResult<()> {
+    if name.is_empty()
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains('\0')
+        || name == ".."
+        || name == "."
+    {
+        return Err(AppError::BadRequest(format!(
+            "invalid project directory: {name:?}"
+        )));
+    }
+    Ok(())
+}
+
+/// A CC session id is always the `.jsonl` filename UUID, so anything else is a
+/// traversal attempt or a bug.
+fn validate_session_id(id: &str) -> AppResult<()> {
+    Uuid::parse_str(id)
+        .map(|_| ())
+        .map_err(|_| AppError::BadRequest(format!("session id is not a valid uuid: {id:?}")))
 }
 
 #[tauri::command]
@@ -135,7 +164,7 @@ pub async fn list_cc_projects() -> AppResult<Vec<CcProject>> {
     }
 
     // Most-recently-touched first.
-    out.sort_by(|a, b| b.last_activity_ms.cmp(&a.last_activity_ms));
+    out.sort_by_key(|p| std::cmp::Reverse(p.last_activity_ms));
     Ok(out)
 }
 
@@ -165,6 +194,7 @@ fn peek_cwd(path: &std::path::Path) -> Option<String> {
 
 #[tauri::command]
 pub async fn list_cc_sessions(project_dir: String) -> AppResult<Vec<CcSessionSummary>> {
+    validate_component(&project_dir)?;
     let root = projects_root()?;
     let dir = root.join(&project_dir);
     if !dir.is_dir() {
@@ -172,8 +202,8 @@ pub async fn list_cc_sessions(project_dir: String) -> AppResult<Vec<CcSessionSum
     }
 
     let mut out = Vec::new();
-    let entries = fs::read_dir(&dir)
-        .map_err(|e| AppError::Other(format!("read project dir: {e}")))?;
+    let entries =
+        fs::read_dir(&dir).map_err(|e| AppError::Other(format!("read project dir: {e}")))?;
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
@@ -203,7 +233,7 @@ pub async fn list_cc_sessions(project_dir: String) -> AppResult<Vec<CcSessionSum
         });
     }
 
-    out.sort_by(|a, b| b.last_activity_ms.cmp(&a.last_activity_ms));
+    out.sort_by_key(|p| std::cmp::Reverse(p.last_activity_ms));
     Ok(out)
 }
 
@@ -283,8 +313,12 @@ pub async fn import_cc_session(
     state: State<'_, AppState>,
     input: ImportCcSessionInput,
 ) -> AppResult<Session> {
+    validate_component(&input.project_dir)?;
+    validate_session_id(&input.session_id)?;
     let root = projects_root()?;
-    let path = root.join(&input.project_dir).join(format!("{}.jsonl", input.session_id));
+    let path = root
+        .join(&input.project_dir)
+        .join(format!("{}.jsonl", input.session_id));
     if !path.is_file() {
         return Err(AppError::NotFound(format!(
             "cc session {} in {}",
@@ -296,11 +330,10 @@ pub async fn import_cc_session(
 
     // Refuse if a Forkly session with this id already exists — the Forkly
     // id IS the CC id, so a duplicate import would conflict.
-    let exists: Option<String> =
-        sqlx::query_scalar("SELECT id FROM sessions WHERE id = ?")
-            .bind(&input.session_id)
-            .fetch_optional(pool)
-            .await?;
+    let exists: Option<String> = sqlx::query_scalar("SELECT id FROM sessions WHERE id = ?")
+        .bind(&input.session_id)
+        .fetch_optional(pool)
+        .await?;
     if exists.is_some() {
         return Err(AppError::BadRequest(format!(
             "session {} is already imported",
@@ -325,7 +358,44 @@ pub async fn import_cc_session(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "imported session".to_string());
 
+    // Parse every user/assistant message up front. Doing all the fallible
+    // file I/O before any DB write means a read/parse failure can't leave a
+    // half-imported session behind (which the duplicate-id guard above would
+    // then block from a clean retry).
+    let mut parsed_messages: Vec<(&'static str, String)> = Vec::new();
+    {
+        let file = tokio::fs::File::open(&path)
+            .await
+            .map_err(|e| AppError::Other(format!("open jsonl: {e}")))?;
+        let mut reader = tokio::io::BufReader::new(file).lines();
+        while let Some(line) = reader
+            .next_line()
+            .await
+            .map_err(|e| AppError::Other(format!("read jsonl: {e}")))?
+        {
+            if line.is_empty() {
+                continue;
+            }
+            let value: serde_json::Value = match serde_json::from_str(&line) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let role = match value.get("type").and_then(|v| v.as_str()) {
+                Some("user") => "user",
+                Some("assistant") => "assistant",
+                _ => continue,
+            };
+            if let Some(text) = extract_message_text(&value) {
+                parsed_messages.push((role, text));
+            }
+        }
+    }
+
     let now = now_ms();
+
+    // One transaction: the session row and all its messages commit together,
+    // or nothing does.
+    let mut tx = pool.begin().await?;
     sqlx::query(
         "INSERT INTO sessions
           (id, title, provider_id, model_id, transport_id, system_prompt,
@@ -352,51 +422,36 @@ pub async fn import_cc_session(
     .bind(&cwd)
     .bind(now)
     .bind(now)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
 
-    // Stream the JSONL and insert user/assistant messages in order.
-    let file = tokio::fs::File::open(&path)
-        .await
-        .map_err(|e| AppError::Other(format!("open jsonl: {e}")))?;
-    let mut reader = tokio::io::BufReader::new(file).lines();
-    while let Some(line) = reader
-        .next_line()
-        .await
-        .map_err(|e| AppError::Other(format!("read jsonl: {e}")))?
-    {
-        if line.is_empty() {
-            continue;
-        }
-        let parsed: serde_json::Value = match serde_json::from_str(&line) {
-            Ok(v) => v,
-            Err(_) => continue,
+    for (i, (role, text)) in parsed_messages.iter().enumerate() {
+        let msg_id = Uuid::new_v4().to_string();
+        let model_for_msg = if *role == "assistant" {
+            Some(model_id.as_str())
+        } else {
+            None
         };
-        let t = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
-        if t != "user" && t != "assistant" {
-            continue;
-        }
-        let text = match extract_message_text(&parsed) {
-            Some(t) => t,
-            None => continue,
-        };
-        let role = if t == "user" { "user" } else { "assistant" };
-        let _ = insert_message(
-            pool,
-            &input.session_id,
-            role,
-            &text,
-            Some("anthropic"),
-            if role == "assistant" { Some(&model_id) } else { None },
+        sqlx::query(
+            "INSERT INTO messages
+              (id, session_id, role, content, provider_id, model_id, position, created_at)
+             VALUES (?, ?, ?, ?, 'anthropic', ?, ?, ?)",
         )
+        .bind(&msg_id)
+        .bind(&input.session_id)
+        .bind(role)
+        .bind(text)
+        .bind(model_for_msg)
+        .bind(i as i64)
+        .bind(now)
+        .execute(&mut *tx)
         .await?;
     }
 
+    tx.commit().await?;
+
     // Return the row we just inserted.
-    let sql = format!(
-        "SELECT {} FROM sessions WHERE id = ?",
-        SESSION_SELECT
-    );
+    let sql = format!("SELECT {SESSION_SELECT} FROM sessions WHERE id = ?");
     sqlx::query_as::<_, Session>(&sql)
         .bind(&input.session_id)
         .fetch_one(pool)
@@ -414,3 +469,27 @@ const SESSION_SELECT: &str = "
     appearance_override,
     created_at, updated_at
 ";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_component_rejects_traversal() {
+        assert!(validate_component("..").is_err());
+        assert!(validate_component(".").is_err());
+        assert!(validate_component("").is_err());
+        assert!(validate_component("a/b").is_err());
+        assert!(validate_component("/etc/passwd").is_err());
+        assert!(validate_component("..\\..\\win").is_err());
+        // A real encoded CC project dir name passes.
+        assert!(validate_component("-Users-solal-Desktop-Projects-Forkly").is_ok());
+    }
+
+    #[test]
+    fn validate_session_id_requires_uuid() {
+        assert!(validate_session_id("not-a-uuid").is_err());
+        assert!(validate_session_id("../../etc/passwd").is_err());
+        assert!(validate_session_id("550e8400-e29b-41d4-a716-446655440000").is_ok());
+    }
+}

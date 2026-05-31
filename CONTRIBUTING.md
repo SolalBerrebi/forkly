@@ -24,7 +24,7 @@ If `pnpm` isn't installed, enable it via `corepack enable && corepack prepare pn
 - `src/chat/` — message rendering, composer
 - `docs/` — architecture and provider plugin guide
 
-Architecture overview lives in [`docs/architecture.md`](docs/architecture.md) (TBD). Adding a new LLM provider? See [`docs/providers.md`](docs/providers.md) (TBD).
+Architecture overview lives in [`docs/architecture.md`](docs/architecture.md). Adding a new LLM provider? See [`docs/providers.md`](docs/providers.md).
 
 ## Good first issues
 

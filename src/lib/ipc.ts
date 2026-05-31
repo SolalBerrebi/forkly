@@ -138,6 +138,7 @@ export const ipc = {
 
   startStream: (sessionId: string, userMessage: string) =>
     invoke<void>("start_stream", { sessionId, userMessage }),
+  stopStream: (sessionId: string) => invoke<void>("stop_stream", { sessionId }),
 
   detectClaudeCode: () =>
     invoke<ClaudeCodeStatus>("detect_claude_code"),
