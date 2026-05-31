@@ -22,12 +22,23 @@ interface MessagesState {
    *  Set inside Immer would also break Zustand's snapshot caching → React
    *  "Maximum update depth exceeded" → renderer crash. */
   hydratedSessions: Record<string, true>;
+  /** Deltas that arrived before their `stream:start` was applied, keyed by
+   *  assistant message id. Tauri delivers stream:* events on separate channels
+   *  with no cross-channel ordering guarantee, so under fan-out a delta can
+   *  land first; we buffer here and flush in `addMessage` so leading tokens
+   *  are never lost. */
+  pendingDeltas: Record<string, string>;
 
   hydrateForSession: (sessionId: string) => Promise<void>;
   addMessage: (message: Message) => void;
   appendDelta: (assistantMessageId: string, delta: string) => void;
   finishStream: (assistantMessageId: string, content: string) => void;
   failStream: (assistantMessageId: string | null, sessionId: string, error: string) => void;
+  /** Drop all cached state for one session (call when a session is deleted). */
+  purgeSession: (sessionId: string) => void;
+  /** Drop ALL cached messages (call on workspace switch/delete) so the store
+   *  doesn't grow without bound over a long-lived session. */
+  purgeAll: () => void;
 }
 
 export const useMessagesStore = create<MessagesState>()(
@@ -38,6 +49,7 @@ export const useMessagesStore = create<MessagesState>()(
     streamingSessions: {},
     errors: {},
     hydratedSessions: {},
+    pendingDeltas: {},
 
     hydrateForSession: async (sessionId) => {
       const rows = await ipc.listMessages(sessionId);
@@ -61,6 +73,12 @@ export const useMessagesStore = create<MessagesState>()(
           state.streaming[message.id] = true;
           state.streamingSessions[message.sessionId] = true;
         }
+        // Flush any deltas that raced ahead of this start event.
+        const pending = state.pendingDeltas[message.id];
+        if (pending) {
+          state.byId[message.id].content += pending;
+          delete state.pendingDeltas[message.id];
+        }
         delete state.errors[message.id];
       });
     },
@@ -68,7 +86,14 @@ export const useMessagesStore = create<MessagesState>()(
     appendDelta: (assistantMessageId, delta) => {
       set((state) => {
         const msg = state.byId[assistantMessageId];
-        if (msg) msg.content += delta;
+        if (msg) {
+          msg.content += delta;
+        } else {
+          // Delta arrived before stream:start created the message — buffer it
+          // and flush in addMessage so the leading token(s) aren't lost.
+          state.pendingDeltas[assistantMessageId] =
+            (state.pendingDeltas[assistantMessageId] ?? "") + delta;
+        }
       });
     },
 
@@ -100,6 +125,32 @@ export const useMessagesStore = create<MessagesState>()(
           state.errors[assistantMessageId] = error;
         }
         delete state.streamingSessions[sessionId];
+      });
+    },
+
+    purgeSession: (sessionId) => {
+      set((state) => {
+        for (const id of state.bySession[sessionId] ?? []) {
+          delete state.byId[id];
+          delete state.streaming[id];
+          delete state.errors[id];
+          delete state.pendingDeltas[id];
+        }
+        delete state.bySession[sessionId];
+        delete state.streamingSessions[sessionId];
+        delete state.hydratedSessions[sessionId];
+      });
+    },
+
+    purgeAll: () => {
+      set((state) => {
+        state.byId = {};
+        state.bySession = {};
+        state.streaming = {};
+        state.streamingSessions = {};
+        state.errors = {};
+        state.hydratedSessions = {};
+        state.pendingDeltas = {};
       });
     },
   })),

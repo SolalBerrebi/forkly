@@ -11,6 +11,7 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "../chrome/ConfirmDialog";
+import { isOverlayOpen } from "../lib/overlay";
 import { useMessagesStore } from "../state/messagesStore";
 import { useWorkspaceStore } from "../state/workspaceStore";
 import { CrossGrid } from "./background/CrossGrid";
@@ -51,6 +52,10 @@ export function ForkCanvas() {
   // edges depend on this, so observing per-delta state caused the infinite
   // render storm + 12GB memory blowout.
   const streamingSessions = useMessagesStore((s) => s.streamingSessions);
+  // Surfaced when initial load fails (e.g. the DB couldn't open) so the user
+  // sees a real error + retry instead of an empty "your canvas awaits" state.
+  const hydrationError = useWorkspaceStore((s) => s.hydrationError);
+  const hydrate = useWorkspaceStore((s) => s.hydrate);
 
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [deleteCandidates, setDeleteCandidates] = useState<string[] | null>(null);
@@ -188,7 +193,10 @@ export function ForkCanvas() {
 
     const handler = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement | null;
-      if (isTypingTarget(tgt)) return;
+      // Bail while a menu/dialog/popover is open so Backspace meant to dismiss
+      // it doesn't delete the selected node, and `M`/number keys meant for the
+      // open menu don't fire canvas actions behind it.
+      if (isTypingTarget(tgt) || isOverlayOpen()) return;
 
       // Merge
       if (e.key.toLowerCase() === "m" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -250,7 +258,25 @@ export function ForkCanvas() {
       deleteKeyCode={null}
     >
       <CrossGrid />
-      {isEmpty && <EmptyState />}
+      {isEmpty && !hydrationError && <EmptyState />}
+      {hydrationError && (
+        <Panel position="top-center" className="top-3!">
+          <div className="flex items-center gap-3 rounded-lg border border-danger/40 bg-bg-elevated/90 px-4 py-2 font-mono text-[11px] text-fg backdrop-blur">
+            <span className="text-danger">⚠ couldn't load your workspace</span>
+            <span className="max-w-md truncate text-fg-subtle">
+              {hydrationError}
+            </span>
+            <button
+              onClick={() => {
+                void hydrate();
+              }}
+              className="rounded border border-border px-2 py-0.5 text-fg-muted transition-colors hover:text-fg"
+            >
+              retry
+            </button>
+          </div>
+        </Panel>
+      )}
       {selectedNodeIds.length >= 2 && (
         <Panel position="top-center" className="top-3!">
           <div className="select-none rounded-full border border-accent-from/40 bg-bg-elevated/80 px-3 py-1.5 font-mono text-[11px] text-fg backdrop-blur">

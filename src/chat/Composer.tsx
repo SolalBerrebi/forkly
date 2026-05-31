@@ -1,4 +1,4 @@
-import { ArrowUp, GitFork, Loader2 } from "lucide-react";
+import { ArrowUp, GitFork, Loader2, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ProviderPicker } from "../chrome/ProviderPicker";
 import { ipc } from "../lib/ipc";
@@ -62,6 +62,12 @@ export function Composer({ sessionId }: ComposerProps) {
     }
   };
 
+  const stop = () => {
+    ipc
+      .stopStream(sessionId)
+      .catch((err) => console.error("stop stream failed", err));
+  };
+
   const isTerminal = appearance === "terminal";
 
   return (
@@ -99,7 +105,9 @@ export function Composer({ sessionId }: ComposerProps) {
           onKeyDown={(e) => {
             // Don't let xyflow eat the keystroke
             e.stopPropagation();
-            if (e.key === "Enter" && !e.shiftKey) {
+            // Skip the Enter that commits an IME composition (CJK, dead-key
+            // accents) — isComposing stays true until the candidate is locked in.
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               send();
             }
@@ -112,18 +120,29 @@ export function Composer({ sessionId }: ComposerProps) {
             isTerminal ? "font-mono" : "font-sans"
           }`}
         />
-        <button
-          onClick={send}
-          aria-label="Send"
-          disabled={!value.trim() || disabled}
-          className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-all hover:bg-accent-from/15 hover:text-accent-from disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-fg-muted"
-        >
-          {busy || isStreaming ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <ArrowUp className="h-3.5 w-3.5" />
-          )}
-        </button>
+        {isStreaming ? (
+          <button
+            onClick={stop}
+            aria-label="Stop generating"
+            title="Stop generating"
+            className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-all hover:bg-danger/15 hover:text-danger"
+          >
+            <Square className="h-3 w-3 fill-current" />
+          </button>
+        ) : (
+          <button
+            onClick={send}
+            aria-label="Send"
+            disabled={!value.trim() || busy}
+            className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-all hover:bg-accent-from/15 hover:text-accent-from disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-fg-muted"
+          >
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <ArrowUp className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
       </div>
       <div className="mt-2 flex items-center justify-between gap-2 px-1">
         {error ? (

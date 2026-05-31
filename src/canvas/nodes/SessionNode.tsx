@@ -24,6 +24,7 @@ import {
 import { memo, useEffect, useState, type ReactNode } from "react";
 import { ChatView } from "../../chat/ChatView";
 import { ConfirmDialog } from "../../chrome/ConfirmDialog";
+import { ErrorBoundary } from "../../chrome/ErrorBoundary";
 import { formatCompactCount, formatRelativeTime } from "../../lib/format";
 import { ipc } from "../../lib/ipc";
 import { MODEL_CATALOG, labelForModel } from "../../providers/models";
@@ -192,7 +193,9 @@ function SessionNodeImpl({ id, data, selected }: NodeProps<SessionNodeType>) {
           >
             <GitFork className="h-3.5 w-3.5" />
           </div>
-          <div className="flex-1 truncate font-mono text-xs text-fg">{data.title}</div>
+          <div className="flex-1 truncate font-mono text-xs text-fg">
+            {data.title || "untitled"}
+          </div>
           <ModelPicker
             sessionId={id}
             providerId={data.providerId}
@@ -296,15 +299,38 @@ function SessionNodeImpl({ id, data, selected }: NodeProps<SessionNodeType>) {
             terminal toggle in the header only affects THIS cell — Composer,
             Message, and CSS-selector children all reroute through it. */}
         <SessionAppearanceProvider override={appearanceOverride}>
-          {mode === "full" && <ChatView sessionId={id} />}
-          {mode === "label" && <LabelBody data={data} />}
+          {/* Per-node boundary: a throw while rendering one conversation (bad
+              markdown, unexpected payload) shows a small inline fallback
+              instead of white-screening the whole canvas. */}
+          <ErrorBoundary
+            label="session"
+            fallback={(err, reset) => (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-5 text-center">
+                <div className="font-mono text-[11px] text-danger">
+                  this cell hit an error
+                </div>
+                <p className="line-clamp-3 font-mono text-[10px] text-fg-subtle">
+                  {err.message}
+                </p>
+                <button
+                  onClick={reset}
+                  className="rounded border border-border px-2 py-1 font-mono text-[10px] text-fg-muted transition-colors hover:text-fg"
+                >
+                  retry
+                </button>
+              </div>
+            )}
+          >
+            {mode === "full" && <ChatView sessionId={id} />}
+            {mode === "label" && <LabelBody data={data} />}
+          </ErrorBoundary>
         </SessionAppearanceProvider>
       </motion.div>
 
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title={`delete "${data.title}"?`}
+        title={`delete "${data.title || "untitled"}"?`}
         description={
           <>
             This permanently removes the session and all its messages. Forks
@@ -611,11 +637,13 @@ function LabelBody({ data }: { data: SessionNodeData }) {
   // big line of text becomes unreadable. We render the title huge so the
   // workspace stays scannable even when fully zoomed out.
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
-      <div className="font-mono text-[44px] leading-none tracking-tight text-fg">
-        {data.title}
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 text-center">
+      <div className="line-clamp-3 max-w-full font-mono text-[44px] leading-none tracking-tight wrap-break-word text-fg">
+        {data.title || "untitled"}
       </div>
-      <div className="font-mono text-[18px] text-fg-muted">{data.modelId}</div>
+      <div className="max-w-full truncate font-mono text-[18px] text-fg-muted">
+        {data.modelId}
+      </div>
     </div>
   );
 }

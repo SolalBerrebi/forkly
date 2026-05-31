@@ -1,3 +1,4 @@
+import { getVersion } from "@tauri-apps/api/app";
 import { useReactFlow } from "@xyflow/react";
 import { Activity, Download, GitFork, LayoutGrid, Moon, Plus, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -19,6 +20,14 @@ export function TopBar() {
   const flow = useReactFlow();
   const [theme, setTheme] = useState<Theme>("dark");
   const [netLogOpen, setNetLogOpen] = useState(false);
+  // Real app version from the Tauri manifest (single source of truth) so the
+  // pill can't drift from the shipped build the way a hardcoded string did.
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    getVersion()
+      .then(setVersion)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const initial = getInitialTheme();
@@ -102,7 +111,12 @@ export function TopBar() {
         <div className="flex items-center gap-2 rounded-lg border border-(--glass-border) bg-(--glass-bg) backdrop-saturate-140 px-3 py-1.5 backdrop-blur">
           <GitFork className="h-3.5 w-3.5 text-accent-from" />
           <span className="font-mono text-sm tracking-tight">forkly</span>
-          <span className="font-mono text-[10px] text-fg-subtle">v0.1.0-dev</span>
+          {version && (
+            <span className="font-mono text-[10px] text-fg-subtle">
+              v{version}
+              {import.meta.env.DEV ? "-dev" : ""}
+            </span>
+          )}
         </div>
         <WorkspaceSwitcher />
       </div>
