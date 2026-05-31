@@ -40,7 +40,7 @@ pub async fn run_in_terminal(script: String) -> AppResult<()> {
             .status()
             .await
             .map_err(|e| AppError::Other(format!("osascript: {e}")))?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(target_os = "linux")]
@@ -90,6 +90,8 @@ pub async fn run_in_terminal(script: String) -> AppResult<()> {
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = script;
-        Err(AppError::Other("unsupported OS for terminal launcher".into()))
+        Err(AppError::Other(
+            "unsupported OS for terminal launcher".into(),
+        ))
     }
 }

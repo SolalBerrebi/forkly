@@ -35,9 +35,8 @@ pub async fn list_sessions(
                 .await?
         }
         None => {
-            let sql = format!(
-                "SELECT {SELECT_SESSION_COLUMNS} FROM sessions ORDER BY created_at ASC"
-            );
+            let sql =
+                format!("SELECT {SELECT_SESSION_COLUMNS} FROM sessions ORDER BY created_at ASC");
             sqlx::query_as::<_, Session>(&sql).fetch_all(pool).await?
         }
     };
@@ -52,13 +51,13 @@ pub async fn create_session(
     let pool = state.db().await?;
     let id = Uuid::new_v4().to_string();
     let now = now_ms();
-    let title = input.title.unwrap_or_else(|| "untitled session".to_string());
+    let title = input
+        .title
+        .unwrap_or_else(|| "untitled session".to_string());
     let transport = input
         .transport_id
         .unwrap_or_else(|| "claude-code".to_string());
-    let workspace = input
-        .workspace_id
-        .unwrap_or_else(|| "default".to_string());
+    let workspace = input.workspace_id.unwrap_or_else(|| "default".to_string());
     let px = input.position_x.unwrap_or(0.0);
     let py = input.position_y.unwrap_or(0.0);
 
@@ -137,37 +136,50 @@ pub async fn update_session(
             .execute(pool)
             .await?;
     }
-    if let (Some(px), Some(py)) = (patch.position_x, patch.position_y) {
-        sqlx::query(
-            "UPDATE sessions SET position_x = ?, position_y = ?, updated_at = ? WHERE id = ?",
-        )
-        .bind(px)
-        .bind(py)
-        .bind(now)
-        .bind(&id)
-        .execute(pool)
-        .await?;
+    // Each dimension updates independently so a patch carrying only one axis
+    // (or only width, or only height) isn't silently dropped — the previous
+    // all-or-nothing `if let (Some, Some)` discarded partial updates with no
+    // error. Callers that move/resize still send both and just incur an extra
+    // cheap UPDATE.
+    if let Some(px) = patch.position_x {
+        sqlx::query("UPDATE sessions SET position_x = ?, updated_at = ? WHERE id = ?")
+            .bind(px)
+            .bind(now)
+            .bind(&id)
+            .execute(pool)
+            .await?;
     }
-    if let (Some(w), Some(h)) = (patch.width, patch.height) {
-        sqlx::query(
-            "UPDATE sessions SET width = ?, height = ?, updated_at = ? WHERE id = ?",
-        )
-        .bind(w)
-        .bind(h)
-        .bind(now)
-        .bind(&id)
-        .execute(pool)
-        .await?;
+    if let Some(py) = patch.position_y {
+        sqlx::query("UPDATE sessions SET position_y = ?, updated_at = ? WHERE id = ?")
+            .bind(py)
+            .bind(now)
+            .bind(&id)
+            .execute(pool)
+            .await?;
+    }
+    if let Some(w) = patch.width {
+        sqlx::query("UPDATE sessions SET width = ?, updated_at = ? WHERE id = ?")
+            .bind(w)
+            .bind(now)
+            .bind(&id)
+            .execute(pool)
+            .await?;
+    }
+    if let Some(h) = patch.height {
+        sqlx::query("UPDATE sessions SET height = ?, updated_at = ? WHERE id = ?")
+            .bind(h)
+            .bind(now)
+            .bind(&id)
+            .execute(pool)
+            .await?;
     }
     if let Some(locked) = patch.position_locked {
-        sqlx::query(
-            "UPDATE sessions SET position_locked = ?, updated_at = ? WHERE id = ?",
-        )
-        .bind(locked)
-        .bind(now)
-        .bind(&id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE sessions SET position_locked = ?, updated_at = ? WHERE id = ?")
+            .bind(locked)
+            .bind(now)
+            .bind(&id)
+            .execute(pool)
+            .await?;
     }
     // Empty string is the sentinel for "clear back to follow-global", which we
     // store as SQL NULL. Anything else ("terminal" or "chat") is stored as-is.
@@ -177,14 +189,12 @@ pub async fn update_session(
         } else {
             Some(appearance.as_str())
         };
-        sqlx::query(
-            "UPDATE sessions SET appearance_override = ?, updated_at = ? WHERE id = ?",
-        )
-        .bind(value)
-        .bind(now)
-        .bind(&id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE sessions SET appearance_override = ?, updated_at = ? WHERE id = ?")
+            .bind(value)
+            .bind(now)
+            .bind(&id)
+            .execute(pool)
+            .await?;
     }
 
     fetch_session(pool, &id).await
@@ -319,6 +329,9 @@ pub async fn collapse_session(state: State<'_, AppState>, id: String) -> AppResu
 
 #[tauri::command]
 pub async fn delete_session(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    // Abort any in-flight stream for this session first, so its task stops
+    // writing to rows we're about to delete and its CLI subprocess gets reaped.
+    state.cancel_stream(&id);
     let pool = state.db().await?;
     let result = sqlx::query("DELETE FROM sessions WHERE id = ?")
         .bind(&id)

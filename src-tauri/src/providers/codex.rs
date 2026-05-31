@@ -18,23 +18,20 @@
 //! Each line is `{"type": "...", ...}`. Events we handle:
 //!   - `thread.started`  — capture `thread_id` (currently unused; logged only)
 //!   - `turn.started`    — informational
-//!   - `item.started`    — `item.item_type == "agent_message"` marks the
-//!                         assistant's response beginning
+//!   - `item.started`    — `item.item_type == "agent_message"` marks the reply
 //!   - `item.delta`      — `delta` is a text fragment; emit as `StreamEvent::Delta`
 //!   - `item.completed`  — assistant message bounded
 //!   - `turn.completed`  — may carry `usage` with prompt/completion tokens
-//!   - `error`           — terminal error; surface to user with a hint to
-//!                         run `codex login` if it looks like an auth failure
+//!   - `error`           — terminal error; hints to run `codex login` on auth failure
 //!
 //! Unknown event types are ignored via `#[serde(other)]` so future Codex
 //! releases don't break us.
 
 use crate::error::{AppError, AppResult};
-use crate::providers::cli_runner::CliProcess;
+use crate::providers::cli_runner::{self, CliProcess};
 use crate::providers::{CodexRequest, StreamEvent};
 use serde::Deserialize;
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 use tokio::sync::mpsc;
 
 #[derive(Deserialize, Debug)]
@@ -138,11 +135,8 @@ struct ErrorPayload {
     message: Option<String>,
 }
 
-pub async fn stream_chat(
-    req: CodexRequest,
-    tx: mpsc::Sender<StreamEvent>,
-) -> AppResult<()> {
-    let mut cmd = Command::new("codex");
+pub async fn stream_chat(req: CodexRequest, tx: mpsc::Sender<StreamEvent>) -> AppResult<()> {
+    let mut cmd = cli_runner::command("codex");
     cmd.arg("exec")
         .arg("--json")
         .arg("--model")
@@ -250,11 +244,12 @@ pub async fn stream_chat(
                         text: Some(t),
                     }) = item
                     {
-                        if kind == "agent_message" && !t.is_empty() {
-                            if tx.send(StreamEvent::Delta(t)).await.is_err() {
-                                process.kill().await;
-                                return Ok(());
-                            }
+                        if kind == "agent_message"
+                            && !t.is_empty()
+                            && tx.send(StreamEvent::Delta(t)).await.is_err()
+                        {
+                            process.kill().await;
+                            return Ok(());
                         }
                     }
                 }
@@ -318,13 +313,19 @@ pub struct DetectionStatus {
 }
 
 pub async fn detect() -> DetectionStatus {
-    let version_out = Command::new("codex").arg("--version").output().await;
+    let version_out = cli_runner::command("codex").arg("--version").output().await;
     let (installed, version) = match version_out {
         Ok(out) if out.status.success() => {
             let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
             (true, Some(v))
         }
-        _ => return DetectionStatus { installed: false, version: None, logged_in: false },
+        _ => {
+            return DetectionStatus {
+                installed: false,
+                version: None,
+                logged_in: false,
+            }
+        }
     };
     DetectionStatus {
         installed,

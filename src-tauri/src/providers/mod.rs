@@ -7,6 +7,43 @@ pub mod ollama;
 pub mod openai;
 
 use serde::Serialize;
+use std::time::Duration;
+
+/// Shared HTTP client for the cloud streaming providers (Anthropic, OpenAI,
+/// Google). Configures:
+///   - a connect timeout, so a black-holed/half-open connection fails fast
+///     instead of hanging the spawned stream task forever, and
+///   - a `read_timeout` that acts as an *idle* timeout between streamed
+///     chunks: a provider that accepts the connection then goes silent
+///     mid-stream errors out after the gap instead of spinning the assistant
+///     bubble indefinitely.
+///
+/// The idle window is deliberately generous (5 min) so genuinely slow
+/// server-side reasoning never trips it — the in-app Stop button is the
+/// primary way to abort an active stream; this is just the safety net for
+/// "user walked away and the socket silently died".
+pub fn http_client() -> reqwest::Client {
+    build_client(Some(Duration::from_secs(300)))
+}
+
+/// Client for the local Ollama transport. No read timeout: a cold model load
+/// (e.g. first prompt to a 70B model) can legitimately take minutes before the
+/// first token, and a stalled localhost socket surfaces as connect-refused
+/// immediately anyway.
+pub fn local_http_client() -> reqwest::Client {
+    build_client(None)
+}
+
+fn build_client(read_timeout: Option<Duration>) -> reqwest::Client {
+    let mut builder = reqwest::Client::builder().connect_timeout(Duration::from_secs(15));
+    if let Some(rt) = read_timeout {
+        builder = builder.read_timeout(rt);
+    }
+    // Falling back to a default client keeps streaming working even if the
+    // builder somehow fails (e.g. a TLS backend init error) rather than taking
+    // the whole turn down.
+    builder.build().unwrap_or_else(|_| reqwest::Client::new())
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatMessage {

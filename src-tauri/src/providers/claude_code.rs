@@ -12,11 +12,10 @@
 //! this parser handles and the flags we deliberately do (and do not) pass.
 
 use crate::error::{AppError, AppResult};
-use crate::providers::cli_runner::CliProcess;
+use crate::providers::cli_runner::{self, CliProcess};
 use crate::providers::{ClaudeCodeRequest, StreamEvent};
 use serde::Deserialize;
 use std::process::Stdio;
-use tokio::process::Command;
 use tokio::sync::mpsc;
 
 /// Top-level shape of each NDJSON line emitted by `claude --print --verbose
@@ -86,11 +85,8 @@ struct AssistantLine {
     error: Option<String>,
 }
 
-pub async fn stream_chat(
-    req: ClaudeCodeRequest,
-    tx: mpsc::Sender<StreamEvent>,
-) -> AppResult<()> {
-    let mut cmd = Command::new("claude");
+pub async fn stream_chat(req: ClaudeCodeRequest, tx: mpsc::Sender<StreamEvent>) -> AppResult<()> {
+    let mut cmd = cli_runner::command("claude");
     cmd.arg("--print")
         .arg("--verbose")
         .arg("--output-format")
@@ -210,14 +206,23 @@ pub struct DetectionStatus {
 
 pub async fn detect() -> DetectionStatus {
     // Is `claude` on PATH and runnable?
-    let version_out = Command::new("claude").arg("--version").output().await;
+    let version_out = cli_runner::command("claude")
+        .arg("--version")
+        .output()
+        .await;
 
     let (installed, version) = match version_out {
         Ok(out) if out.status.success() => {
             let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
             (true, Some(v))
         }
-        _ => return DetectionStatus { installed: false, version: None, logged_in: false },
+        _ => {
+            return DetectionStatus {
+                installed: false,
+                version: None,
+                logged_in: false,
+            }
+        }
     };
 
     // We intentionally do NOT pre-emptively check login state. Claude Code
@@ -237,4 +242,3 @@ pub async fn detect() -> DetectionStatus {
         logged_in: installed,
     }
 }
-

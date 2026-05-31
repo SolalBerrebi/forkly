@@ -52,10 +52,7 @@ struct MessageChunk {
     content: Option<String>,
 }
 
-pub async fn stream_chat(
-    req: OllamaRequest,
-    tx: mpsc::Sender<StreamEvent>,
-) -> AppResult<()> {
+pub async fn stream_chat(req: OllamaRequest, tx: mpsc::Sender<StreamEvent>) -> AppResult<()> {
     let mut messages: Vec<OutMessage> = Vec::with_capacity(req.messages.len() + 1);
     if let Some(sys) = req.system_prompt.as_deref().filter(|s| !s.is_empty()) {
         messages.push(OutMessage {
@@ -77,7 +74,7 @@ pub async fn stream_chat(
     };
 
     let url = format!("{}/api/chat", base_url());
-    let client = reqwest::Client::new();
+    let client = crate::providers::local_http_client();
     let res = client
         .post(&url)
         .header("content-type", "application/json")
@@ -90,8 +87,7 @@ pub async fn stream_chat(
             let msg = e.to_string();
             if msg.contains("Connection refused") || msg.contains("connection refused") {
                 AppError::Upstream(
-                    "ollama isn't running on localhost:11434. start it with `ollama serve`."
-                        .into(),
+                    "ollama isn't running on localhost:11434. start it with `ollama serve`.".into(),
                 )
             } else {
                 AppError::Upstream(format!("ollama request: {e}"))
@@ -116,8 +112,7 @@ pub async fn stream_chat(
     let mut buffer: Vec<u8> = Vec::new();
     let mut stream = res.bytes_stream();
     while let Some(chunk_result) = stream.next().await {
-        let bytes = chunk_result
-            .map_err(|e| AppError::Upstream(format!("ollama stream: {e}")))?;
+        let bytes = chunk_result.map_err(|e| AppError::Upstream(format!("ollama stream: {e}")))?;
         buffer.extend_from_slice(&bytes);
 
         // Drain complete lines, leaving any partial trailing line in the buffer.
@@ -137,7 +132,10 @@ pub async fn stream_chat(
             if let Some(err) = parsed.error {
                 return Err(AppError::Upstream(format!("ollama: {err}")));
             }
-            if let Some(MessageChunk { content: Some(text) }) = parsed.message {
+            if let Some(MessageChunk {
+                content: Some(text),
+            }) = parsed.message
+            {
                 if !text.is_empty() && tx.send(StreamEvent::Delta(text)).await.is_err() {
                     return Ok(()); // receiver dropped
                 }
@@ -200,18 +198,36 @@ pub async fn detect() -> OllamaStatus {
         .build()
     {
         Ok(c) => c,
-        Err(_) => return OllamaStatus { running: false, models: Vec::new() },
+        Err(_) => {
+            return OllamaStatus {
+                running: false,
+                models: Vec::new(),
+            }
+        }
     };
     let res = match client.get(&url).send().await {
         Ok(r) => r,
-        Err(_) => return OllamaStatus { running: false, models: Vec::new() },
+        Err(_) => {
+            return OllamaStatus {
+                running: false,
+                models: Vec::new(),
+            }
+        }
     };
     if !res.status().is_success() {
-        return OllamaStatus { running: false, models: Vec::new() };
+        return OllamaStatus {
+            running: false,
+            models: Vec::new(),
+        };
     }
     let tags = match res.json::<TagsResponse>().await {
         Ok(t) => t,
-        Err(_) => return OllamaStatus { running: true, models: Vec::new() },
+        Err(_) => {
+            return OllamaStatus {
+                running: true,
+                models: Vec::new(),
+            }
+        }
     };
     let models = tags
         .models
@@ -222,5 +238,8 @@ pub async fn detect() -> OllamaStatus {
             modified_at: m.modified_at,
         })
         .collect();
-    OllamaStatus { running: true, models }
+    OllamaStatus {
+        running: true,
+        models,
+    }
 }

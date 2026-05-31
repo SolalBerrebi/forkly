@@ -41,7 +41,11 @@ fn cache_put(cwd: String, branch: Option<String>) {
     if map.len() >= CACHE_CAP {
         // Cheap eviction: drop the oldest entry. Iteration order isn't
         // deterministic but we just need to keep size bounded.
-        if let Some(oldest_key) = map.iter().min_by_key(|(_, v)| v.inserted_at).map(|(k, _)| k.clone()) {
+        if let Some(oldest_key) = map
+            .iter()
+            .min_by_key(|(_, v)| v.inserted_at)
+            .map(|(k, _)| k.clone())
+        {
             map.remove(&oldest_key);
         }
     }
