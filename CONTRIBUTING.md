@@ -4,7 +4,7 @@ Thanks for considering a contribution! Forkly is built in the open, and the goal
 
 ## Getting set up
 
-Prerequisites: Node 20+, pnpm 9+, Rust 1.80+, and the Tauri CLI.
+Prerequisites: Node 22+, pnpm 9+, Rust 1.80+, and the Tauri CLI.
 
 ```bash
 git clone https://github.com/SolalBerrebi/forkly

@@ -62,7 +62,7 @@ Prereqs:
 
 | | Version | One-liner |
 |---|---|---|
-| Node | 20+ | [`nvm install 20`](https://github.com/nvm-sh/nvm) |
+| Node | 22+ | [`nvm install 22`](https://github.com/nvm-sh/nvm) |
 | pnpm | 9+ | `corepack enable && corepack prepare pnpm@latest --activate` |
 | Rust | 1.80+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | Tauri prereqs | varies | [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/) |
