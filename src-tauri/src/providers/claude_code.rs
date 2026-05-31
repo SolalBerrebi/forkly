@@ -97,7 +97,9 @@ pub async fn stream_chat(req: ClaudeCodeRequest, tx: mpsc::Sender<StreamEvent>) 
         .arg("--model")
         .arg(&req.model);
 
-    if let Some(sys) = &req.system_prompt {
+    // Empty means "no custom system prompt" — fall back to Claude Code's
+    // default rather than overriding it with an empty string.
+    if let Some(sys) = req.system_prompt.as_deref().filter(|s| !s.is_empty()) {
         cmd.arg("--system-prompt").arg(sys);
     }
 

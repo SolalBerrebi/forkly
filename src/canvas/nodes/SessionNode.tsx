@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Minimize2,
   MoreHorizontal,
+  Sparkles,
   Terminal,
   Trash2,
 } from "lucide-react";
@@ -25,6 +26,7 @@ import { memo, useEffect, useState, type ReactNode } from "react";
 import { ChatView } from "../../chat/ChatView";
 import { ConfirmDialog } from "../../chrome/ConfirmDialog";
 import { ErrorBoundary } from "../../chrome/ErrorBoundary";
+import { SystemPromptDialog } from "../../chrome/SystemPromptDialog";
 import { formatCompactCount, formatRelativeTime } from "../../lib/format";
 import { ipc } from "../../lib/ipc";
 import { MODEL_CATALOG, labelForModel } from "../../providers/models";
@@ -84,6 +86,11 @@ function SessionNodeImpl({ id, data, selected }: NodeProps<SessionNodeType>) {
     return !!(sess?.preExpandWidth !== null && sess?.preExpandWidth !== undefined);
   });
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [sysPromptOpen, setSysPromptOpen] = useState(false);
+  const systemPrompt = useWorkspaceStore((s) => s.sessions[id]?.systemPrompt ?? "");
+  const updateSessionSystemPrompt = useWorkspaceStore(
+    (s) => s.updateSessionSystemPrompt,
+  );
 
   const toggleAppearance = () => {
     const next = effectiveAppearance === "terminal" ? "chat" : "terminal";
@@ -279,6 +286,19 @@ function SessionNodeImpl({ id, data, selected }: NodeProps<SessionNodeType>) {
                   </>
                 )}
                 <DropdownMenu.Item
+                  onSelect={() => setSysPromptOpen(true)}
+                  className="flex items-center gap-2 rounded px-2 py-1.5 font-mono text-[11px] text-fg-muted outline-none data-highlighted:bg-bg data-highlighted:text-fg"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span className="flex-1">system prompt</span>
+                  {systemPrompt && (
+                    <span className="text-[9px] uppercase tracking-wider text-accent-from">
+                      set
+                    </span>
+                  )}
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                <DropdownMenu.Item
                   onSelect={() => setConfirmOpen(true)}
                   className="flex items-center gap-2 rounded px-2 py-1.5 font-mono text-[11px] text-danger outline-none data-highlighted:bg-danger/10"
                 >
@@ -340,6 +360,17 @@ function SessionNodeImpl({ id, data, selected }: NodeProps<SessionNodeType>) {
         confirmLabel="delete"
         destructive
         onConfirm={handleDelete}
+      />
+
+      <SystemPromptDialog
+        open={sysPromptOpen}
+        onOpenChange={setSysPromptOpen}
+        initialValue={systemPrompt}
+        onSave={(value) =>
+          updateSessionSystemPrompt(id, value).catch((err) =>
+            console.error("update system prompt failed", err),
+          )
+        }
       />
     </>
   );

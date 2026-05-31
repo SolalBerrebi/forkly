@@ -87,7 +87,9 @@ pub async fn stream_chat(req: ApiStreamRequest, tx: mpsc::Sender<StreamEvent>) -
         max_tokens: req.max_tokens,
         stream: true,
         messages: &simple,
-        system: req.system_prompt.as_deref(),
+        // Empty means "no custom system prompt" (matches the other providers),
+        // so a cleared prompt doesn't send an empty system string.
+        system: req.system_prompt.as_deref().filter(|s| !s.is_empty()),
     };
 
     let client = crate::providers::http_client();
