@@ -33,6 +33,10 @@ export interface Session {
   position: { x: number; y: number };
   parentSessionId: SessionId | null;
   forkPointMessageId: string | null;
+  /** Per-session system prompt; null/empty means the transport's default
+   *  (e.g. Claude Code's coding persona). Set it to steer a cell toward plain
+   *  conversation. */
+  systemPrompt: string | null;
   /** Decoded list of source session ids — empty for non-merge sessions. */
   mergeSourceSessionIds: SessionId[];
   workspaceId: WorkspaceId;
@@ -82,6 +86,7 @@ function fromIpc(s: IpcSession): Session {
     position: { x: s.positionX, y: s.positionY },
     parentSessionId: s.parentSessionId,
     forkPointMessageId: s.forkPointMessageId,
+    systemPrompt: s.systemPrompt,
     mergeSourceSessionIds,
     workspaceId: s.workspaceId ?? DEFAULT_WORKSPACE_ID,
     inputTokensTotal: s.inputTokensTotal,
@@ -181,6 +186,10 @@ interface WorkspaceState {
     id: SessionId,
     override: "terminal" | "chat" | null,
   ) => Promise<void>;
+  /** Set (or clear, with "") this cell's system prompt. Applies to every
+   *  transport — the cleanest way to make a CLI-backed cell behave as a plain
+   *  conversational assistant rather than a coding agent. */
+  updateSessionSystemPrompt: (id: SessionId, systemPrompt: string) => Promise<void>;
   /**
    * Toggle a session between its normal size and a generous expanded preset.
    * Backend stores the pre-expand size atomically, so collapse always returns
@@ -707,6 +716,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       });
       // Empty string is the sentinel the backend uses to clear back to NULL.
       await ipc.updateSession(id, { appearanceOverride: override ?? "" });
+    },
+
+    updateSessionSystemPrompt: async (id, systemPrompt) => {
+      set((state) => {
+        const s = state.sessions[id];
+        // Normalize empty → null locally so "is it set?" checks stay simple;
+        // providers treat an empty prompt as "no custom system prompt".
+        if (s) s.systemPrompt = systemPrompt.trim() === "" ? null : systemPrompt;
+      });
+      await ipc.updateSession(id, { systemPrompt });
     },
 
     toggleSessionExpanded: async (id) => {
