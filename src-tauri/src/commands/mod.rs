@@ -1,4 +1,5 @@
 pub mod cc_sessions;
+pub mod demo;
 pub mod git;
 pub mod messages;
 pub mod net_log;

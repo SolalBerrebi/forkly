@@ -222,6 +222,7 @@ pub fn run() {
             commands::cc_sessions::list_cc_projects,
             commands::cc_sessions::list_cc_sessions,
             commands::cc_sessions::import_cc_session,
+            commands::demo::seed_demo_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

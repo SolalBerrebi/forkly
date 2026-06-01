@@ -31,7 +31,7 @@
 
 ## Providers
 
-Forkly speaks to four model families today, each with a **subscription path** (no API key, uses your existing plan) and an **API-key path** for the API tier:
+Forkly speaks to four model families today. **Anthropic** and **OpenAI** have a **subscription path** — no API key, run against your existing Claude / ChatGPT plan through their CLI — and all four have an **API-key path**:
 
 | Provider | Subscription transport | API key transport |
 |---|---|---|
