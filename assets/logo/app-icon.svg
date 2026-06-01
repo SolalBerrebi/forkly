@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Forkly application icon — purple squircle + the white "forking trunk" (Y) mark.
+
+  This is the source passed to `tauri icon` to generate every platform size
+  (icns / ico / PNGs / Windows tiles). It's the brand mark from mark.svg, but:
+    • solid purple family (violet → deep violet) instead of the violet→pink
+      gradient, so it reads unambiguously as "purple"
+    • a Big-Sur-style rounded square with a small margin so it sits well in the
+      macOS dock and Windows taskbar.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
+  <defs>
+    <linearGradient id="forkly-purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </linearGradient>
+    <!-- Top sheen that fades smoothly to transparent — glass feel, no seam. -->
+    <linearGradient id="forkly-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="48%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Purple rounded-square background. -->
+  <rect x="56" y="56" width="912" height="912" rx="208" ry="208" fill="url(#forkly-purple)"/>
+
+  <!-- Soft top highlight for the liquid-glass feel. -->
+  <rect x="56" y="56" width="912" height="912" rx="208" ry="208" fill="url(#forkly-sheen)"/>
+
+  <!-- The white fork / Y: a trunk splitting into two branches with terminal
+       "session" dots. Reads as both a fork-diagram and a stylized Y. -->
+  <g stroke="#ffffff" stroke-width="84" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M 512 784 L 512 464"/>
+    <path d="M 512 464 C 512 368, 352 336, 352 240"/>
+    <path d="M 512 464 C 512 368, 672 336, 672 240"/>
+  </g>
+  <circle cx="352" cy="240" r="58" fill="#ffffff"/>
+  <circle cx="672" cy="240" r="58" fill="#ffffff"/>
+  <circle cx="512" cy="784" r="50" fill="#ffffff" opacity="0.9"/>
+</svg>
