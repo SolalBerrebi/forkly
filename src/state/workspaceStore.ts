@@ -15,6 +15,7 @@ export type WorkspaceId = string;
 
 const DEFAULT_WORKSPACE_ID = "default";
 const LAST_WORKSPACE_KEY = "forkly:last-workspace";
+const DEMO_SEEDED_KEY = "forkly:demo-seeded";
 
 export interface Workspace {
   id: WorkspaceId;
@@ -273,6 +274,27 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           state.hydrationError = null;
         });
         persistCurrentWorkspace(chosen);
+
+        // First launch only: drop a small demo fork tree onto the empty canvas
+        // so the first impression shows what Forkly does. Guarded by a
+        // localStorage flag (set once, so it never re-seeds) and by the backend
+        // (a no-op if any session already exists).
+        if (!localStorage.getItem(DEMO_SEEDED_KEY)) {
+          localStorage.setItem(DEMO_SEEDED_KEY, "1");
+          if (sessions.length === 0) {
+            try {
+              const seeded = await ipc.seedDemoWorkspace();
+              if (seeded) {
+                const rows = await ipc.listSessions(chosen);
+                set((state) => {
+                  for (const row of rows) state.sessions[row.id] = fromIpc(row);
+                });
+              }
+            } catch (err) {
+              console.warn("demo seed failed", err);
+            }
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         set((state) => {

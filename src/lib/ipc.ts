@@ -165,6 +165,10 @@ export const ipc = {
     invoke<NetLogEntry[]>("list_net_log", { limit }),
   clearNetLog: () => invoke<void>("clear_net_log"),
 
+  /** Seed the first-launch demo fork tree; resolves to whether anything was
+   *  seeded (false if the canvas already had sessions). */
+  seedDemoWorkspace: () => invoke<boolean>("seed_demo_workspace"),
+
   listCcProjects: () => invoke<CcProject[]>("list_cc_projects"),
   listCcSessions: (projectDir: string) =>
     invoke<CcSessionSummary[]>("list_cc_sessions", { projectDir }),

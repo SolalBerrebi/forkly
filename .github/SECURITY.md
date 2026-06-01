@@ -9,7 +9,9 @@ choose. We take that trust model seriously.
 
 **Please do not open a public issue for security vulnerabilities.**
 
-Instead, email **security@forkly.app** with:
+Preferred: use GitHub's private reporting — **Security → [Report a vulnerability](https://github.com/SolalBerrebi/forkly/security/advisories/new)** on the repo. If you'd rather email, use **security@forkly.app**.
+
+Include:
 
 - a description of the issue and its impact,
 - steps to reproduce (a proof-of-concept is ideal),
